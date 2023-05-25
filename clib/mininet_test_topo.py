@@ -3,20 +3,23 @@
 
 from collections import namedtuple
 import os
+import pty
+import select
 import socket
 import string
 import shutil
 import subprocess
+import tempfile
 import time
 
 import netifaces
 
 # pylint: disable=too-many-arguments
 
-from mininet.log import output, warn
+from mininet.log import output, warn, error
 from mininet.topo import Topo
 from mininet.node import Controller
-from mininet.node import CPULimitedHost
+from mininet.node import Host
 from mininet.node import OVSSwitch
 from mininet.link import TCIntf, Link
 
@@ -70,12 +73,68 @@ class FaucetLink(Link):
         )
 
 
-class FaucetHost(CPULimitedHost):
+class FaucetHost(Host):
     """Base Mininet Host class, for Mininet-based tests."""
 
     def __init__(self, *args, **kwargs):
         self.pid_files = []
         super().__init__(*args, **kwargs)
+
+    def startShell(self, mnopts=None):
+        "Start a shell process for running commands"
+        if self.shell:
+            error("%s: shell is already running\n" % self.name)
+            return
+        # mnexec: (c)lose descriptors, (d)etach from tty,
+        # (p)rint pid, and run in (n)amespace
+        opts = "-cd" if mnopts is None else mnopts
+        if self.inNamespace:
+            opts += "n"
+        # bash -i: force interactive
+        # -s: pass $* to shell, and make process easy to find in ps
+        # prompt is set to sentinel chr( 127 )
+        cmd = [
+            "mnexec",
+            opts,
+            "env",
+            "PS1=" + chr(127),
+            "dash",
+            "-is",
+            "mininet:" + self.name,
+        ]
+
+        # Spawn a shell subprocess in a pseudo-tty, to disable buffering
+        # in the subprocess and insulate it from signals (e.g. SIGINT)
+        # received by the parent
+        self.master, self.slave = pty.openpty()
+        self.shell = self._popen(
+            cmd, stdin=self.slave, stdout=self.slave, stderr=self.slave, close_fds=False
+        )
+        # XXX BL: This doesn't seem right, and we should also probably
+        # close our files when we exit...
+        self.stdin = os.fdopen(self.master, "r")
+        self.stdout = self.stdin
+        self.pid = self.shell.pid
+        self.pollOut = select.poll()
+        self.pollOut.register(self.stdout)
+        # Maintain mapping between file descriptors and nodes
+        # This is useful for monitoring multiple nodes
+        # using select.poll()
+        self.outToNode[self.stdout.fileno()] = self
+        self.inToNode[self.stdin.fileno()] = self
+        self.execed = False
+        self.lastCmd = None
+        self.lastPid = None
+        self.readbuf = ""
+        # Wait for prompt
+        while True:
+            data = self.read(1024)
+            if data[-1] == chr(127):
+                break
+            self.pollOut.poll()
+        self.waiting = False
+        # +m: disable job control notification
+        self.cmd("unset HISTFILE; stty -echo; set +m")
 
     def terminate(self):
         # If any 'dnsmasq' processes were started, terminate them now
@@ -134,6 +193,14 @@ class FaucetHost(CPULimitedHost):
         """Return host IP as a string"""
         return self.cmd("hostname -I")
 
+    def run_ip_batch(self, cmds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd_filename = os.path.join(tmpdir, "ipcmds.txt")
+            with open(cmd_filename, "w") as cmd_file:
+                cmd_file.write("\n".join(cmds))
+            result = self.cmd("ip -b %s" % cmd_filename)
+            assert result == "", (cmds, result)
+
 
 class VLANHost(FaucetHost):
     """Implementation of a Mininet host on a tagged VLAN."""
@@ -155,9 +222,23 @@ class VLANHost(FaucetHost):
             vlans = [100]
         self.vlans = vlans
         self.vlan_intfs = {}
-        cmds = []
+        batch_cmds = []
         intf = self.defaultIntf()
         self.intf_root_name = intf.name
+        unique_intfs = set()
+
+        def _config_vlan(root_name, full_name, vlan_id):
+            batch_cmds.extend(
+                [
+                    "link add link %s name %s type vlan id %s"
+                    % (root_name, full_name, vlan_id),
+                    "link set dev %s up" % full_name,
+                ]
+            )
+
+        def _config_ip(config_full_name, config_ip):
+            batch_cmds.extend(["addr add %s dev %s" % (config_ip, config_full_name)])
+
         if "vlan_intfs" in params:
             vlan_intfs = params.get("vlan_intfs", {})
             for vlan_id, ip_addr in vlan_intfs.items():
@@ -168,45 +249,31 @@ class VLANHost(FaucetHost):
                         prev_name = intf_name
                         # Cannot have intf name tu0xy-eth0.VID1.VID2 as that takes up too many bytes
                         intf_name += ".%s" % vlan_i
-                        cmds.extend(
-                            [
-                                "ip link add link %s name %s type vlan id %s"
-                                % (prev_name, intf_name, vlans[vlan_i]),
-                                "ip link set dev %s up" % (intf_name),
-                            ]
-                        )
+                        if intf_name not in unique_intfs:
+                            _config_vlan(prev_name, intf_name, vlans[vlan_i])
+                            unique_intfs.add(intf_name)
                         self.nameToIntf[intf_name] = intf
                         self.vlan_intfs.setdefault(vlan_id, [])
                         self.vlan_intfs[vlan_id].append(intf_name)
-                    cmds.append("ip -4 addr add %s dev %s" % (ip_addr, intf_name))
+                    _config_ip(intf_name, ip_addr)
                 else:
                     intf_name = "%s.%s" % (intf, vlans[vlan_id])
-                    cmds.extend(
-                        [
-                            "vconfig add %s %d" % (intf.name, vlans[vlan_id]),
-                            "ip -4 addr add %s dev %s" % (ip_addr, intf_name),
-                            "ip link set dev %s up" % intf_name,
-                        ]
-                    )
+                    _config_vlan(intf, intf_name, vlans[vlan_id])
+                    _config_ip(intf_name, ip_addr)
                     self.nameToIntf[intf_name] = intf
                     self.vlan_intfs[vlan_id] = intf_name
         else:
-            vlan_intf_name = "%s.%s" % (intf, ".".join(str(v) for v in vlans))
-            cmds.extend(
-                [
-                    "ip link set dev %s up" % vlan_intf_name,
-                    "ip -4 addr add %s dev %s" % (params["ip"], vlan_intf_name),
-                ]
-            )
-            for vlan in vlans:
-                cmds.append("vconfig add %s %d" % (intf, vlan))
-            intf.name = vlan_intf_name
-            self.nameToIntf[vlan_intf_name] = intf
-        cmds.extend(
-            ["ip -4 addr flush dev %s" % intf, "ip -6 addr flush dev %s" % intf]
-        )
-        for cmd in cmds:
-            self.cmd(cmd)
+            for vlan_id in vlans:
+                intf_name = "%s.%s" % (intf, vlan_id)
+                _config_vlan(intf, intf_name, vlan_id)
+                _config_ip(intf_name, params["ip"])
+                self.nameToIntf[intf_name] = intf
+                self.vlan_intfs.setdefault(vlan_id, [])
+                self.vlan_intfs[vlan_id].append(intf_name)
+            intf.name = intf_name
+
+        batch_cmds.extend(["addr flush dev %s" % self.intf_root_name])
+        self.run_ip_batch(batch_cmds)
         return super_config
 
 
@@ -320,13 +387,21 @@ class FaucetSwitch(OVSSwitch):
             + intfs
         )
         # switch interfaces on mininet host, must have no IP config.
+        sysctls = []
+        ipcmds = []
         for intf in switch_intfs:
-            for ipv in (4, 6):
-                self.cmd("ip -%u addr flush dev %s" % (ipv, intf))
-            assert (
-                self.cmd("echo 1 > /proc/sys/net/ipv6/conf/%s/disable_ipv6" % intf)
-                == ""
-            )
+            ipcmds.append("addr flush dev %s" % intf)
+            sysctls.append("net.ipv6.conf.%s.disable_ipv6=1" % intf)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sysctl_filename = os.path.join(tmpdir, "sysctl.txt")
+            ip_batch_filename = os.path.join(tmpdir, "ipbatch.txt")
+            with open(sysctl_filename, "w") as sysctl_file:
+                sysctl_file.write("\n".join(sysctls))
+            with open(ip_batch_filename, "w") as ip_batch_file:
+                ip_batch_file.write("\n".join(ipcmds))
+            self.cmd("sysctl -p %s" % sysctl_filename)
+            result = self.cmd("ip -b %s" % ip_batch_filename)
+            assert result == "", (result, ipcmds)
         # If necessary, restore TC config overwritten by OVS
         if not self.batch:
             for intf in self.intfList():
@@ -541,6 +616,7 @@ socket_timeout=15
         self.tmpdir = tmpdir
         self.controller_intf = controller_intf
         self.controller_ipv6 = controller_ipv6
+        self.cached_ryu_pid = None
         super().__init__(
             name_with_pid, cargs=self._add_cargs(cargs, name_with_pid), **kwargs
         )
@@ -574,7 +650,9 @@ socket_timeout=15
 
     def _start_tcpdump(self):
         """Start a tcpdump for OF port."""
-        self.ofcap = os.path.join(self.tmpdir, "-".join((self.name, "of.cap")))
+        self.ofcap = os.path.join(
+            self.tmpdir, "-".join((self.name, "%u-of.cap" % self.port))
+        )
         tcpdump_args = " ".join(
             (
                 "-s 0",
@@ -614,45 +692,47 @@ socket_timeout=15
             tls_cargs.append(("--ryu-ofp-ssl-listen-port=%u" % ofctl_port))
         return " ".join(tls_cargs)
 
-    def _command(self, env, tmpdir, name, args):
+    def _command(self, env, name, args):
         """Wrap controller startup command in shell script with environment."""
         env_vars = []
         for var, val in sorted(env.items()):
             env_vars.append("=".join((var, val)))
-        script_wrapper_name = os.path.join(tmpdir, "start-%s.sh" % name)
         cprofile_args = ""
         if self.CPROFILE:
             cprofile_args = "python3 -m cProfile -s time"
         full_faucet_dir = os.path.abspath(mininet_test_util.FAUCET_DIR)
-        with open(script_wrapper_name, "w", encoding="utf-8") as script_wrapper:
-            faucet_cli = "PYTHONPATH=%s %s exec timeout %u %s %s %s $*\n" % (
-                os.path.dirname(full_faucet_dir),
-                " ".join(env_vars),
-                self.MAX_CTL_TIME,
-                os.path.join(full_faucet_dir, "__main__.py"),
-                cprofile_args,
-                args,
-            )
-            script_wrapper.write(faucet_cli)
-        return "/bin/sh %s" % script_wrapper_name
+        faucet_cli = "PYTHONPATH=%s %s timeout %u %s %s %s" % (
+            os.path.dirname(full_faucet_dir),
+            " ".join(env_vars),
+            self.MAX_CTL_TIME,
+            os.path.join(full_faucet_dir, "__main__.py"),
+            cprofile_args,
+            args,
+        )
+        return faucet_cli
 
     def ryu_pid(self):
         """Return PID of ryu-manager process."""
-        if os.path.exists(self.pid_file) and os.path.getsize(self.pid_file) > 0:
-            pid = None
-            with open(self.pid_file, encoding="utf-8") as pid_file:
-                pid = int(pid_file.read())
-            return pid
-        return None
+        if self.cached_ryu_pid is None:
+            if os.path.exists(self.pid_file) and os.path.getsize(self.pid_file) > 0:
+                with open(self.pid_file, encoding="utf-8") as pid_file:
+                    self.cached_ryu_pid = int(pid_file.read())
+        return self.cached_ryu_pid
 
     def listen_port(self, port, state="LISTEN"):
         """Return True if port in specified TCP state."""
-        for ipv in (4, 6):
-            listening_out = self.cmd(
-                mininet_test_util.tcp_listening_cmd(port, ipv=ipv, state=state)
-            ).split()
-            for pid in listening_out:
-                if int(pid) == self.ryu_pid():
+        ryu_pid = self.ryu_pid()
+        if ryu_pid is not None:
+            for ipv in (4, 6):
+                listening_pids = [
+                    int(pid)
+                    for pid in self.cmd(
+                        mininet_test_util.tcp_listening_cmd(
+                            port, ipv=ipv, state=state, pid=ryu_pid
+                        )
+                    ).split()
+                ]
+                if listening_pids:
                     return True
         return False
 
@@ -669,7 +749,7 @@ socket_timeout=15
 
     def connected(self):
         """Return True if at least one switch connected and controller healthy."""
-        return self.healthy() and self.listen_port(self.port, state="ESTABLISHED")
+        return self.listen_port(self.port, state="ESTABLISHED") and self.healthy()
 
     def logname(self):
         """Return log file for controller."""
@@ -691,33 +771,9 @@ socket_timeout=15
         super().start()
 
     def _stop_cap(self):
-        """Stop tcpdump for OF port and run tshark to decode it."""
+        """Stop tcpdump for OF port."""
         if os.path.exists(self.ofcap):
             self.cmd(" ".join(["fuser", "-15", "-k", self.ofcap]))
-            text_ofcap_log = "%s.txt" % self.ofcap
-            with open(text_ofcap_log, "w", encoding="utf-8") as text_ofcap:
-                subprocess.call(
-                    [
-                        "timeout",
-                        str(self.MAX_CTL_TIME),
-                        "tshark",
-                        "-l",
-                        "-n",
-                        "-Q",
-                        "-d",
-                        "tcp.port==%u,openflow" % self.port,
-                        "-O",
-                        "openflow_v4",
-                        "-Y",
-                        "openflow_v4",
-                        "-r",
-                        self.ofcap,
-                    ],
-                    stdout=text_ofcap,
-                    stdin=mininet_test_util.DEVNULL,
-                    stderr=mininet_test_util.DEVNULL,
-                    close_fds=True,
-                )
 
     def stop(self):  # pylint: disable=arguments-differ
         """Stop controller."""
@@ -772,7 +828,7 @@ class FAUCET(BaseFAUCET):
             controller_intf,
             controller_ipv6,
             cargs=cargs,
-            command=self._command(env, tmpdir, name, " ".join(self.START_ARGS)),
+            command=self._command(env, name, " ".join(self.START_ARGS)),
             port=port,
             **kwargs
         )
@@ -807,7 +863,7 @@ class Gauge(BaseFAUCET):
             controller_intf,
             controller_ipv6,
             cargs=self._tls_cargs(port, ctl_privkey, ctl_cert, ca_certs),
-            command=self._command(env, tmpdir, name, "--gauge"),
+            command=self._command(env, name, "--gauge"),
             port=port,
             **kwargs
         )

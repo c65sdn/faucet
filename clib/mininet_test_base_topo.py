@@ -288,36 +288,36 @@ class FaucetTopoTestBase(FaucetTestBase):
                 ]
                 bond_name = "bond%u" % (bond_index)
                 self.host_information[host_id]["bond"] = bond_name
+                bond_cmds = []
                 for bond_member in bond_members:
                     # Deconfigure bond members
-                    self.quiet_commands(
-                        host,
-                        (
-                            "ip link set %s down" % bond_member,
-                            "ip address flush dev %s" % bond_member,
-                        ),
+                    bond_cmds.extend(
+                        [
+                            "link set %s down" % bond_member,
+                            "address flush dev %s" % bond_member,
+                        ]
                     )
                 # Configure bond interface
-                self.quiet_commands(
-                    host,
-                    (
+                bond_cmds.extend(
+                    [
                         (
-                            "ip link add %s address 0e:00:00:00:00:99 "
+                            "link add %s address 0e:00:00:00:00:99 "
                             "type bond mode 802.3ad lacp_rate fast miimon 100 "
                             "xmit_hash_policy layer2+3"
                         )
                         % (bond_name),
-                        "ip add add %s/%s dev %s"
-                        % (orig_ip, self.NETPREFIX, bond_name),
-                        "ip link set %s up" % bond_name,
-                    ),
+                        "addr add %s/%s dev %s" % (orig_ip, self.NETPREFIX, bond_name),
+                        "link set %s up" % bond_name,
+                    ]
                 )
                 # Add bond members
                 for bond_member in bond_members:
-                    self.quiet_commands(
-                        host,
-                        ("ip link set dev %s master %s" % (bond_member, bond_name),),
+                    bond_cmds.extend(
+                        [
+                            "link set dev %s master %s" % (bond_member, bond_name),
+                        ]
                     )
+                host.run_ip_batch(bond_cmds)
                 bond_index += 1
                 # Return the ports to UP
                 for dp_i, ports in self.host_port_maps[host_id].items():
@@ -441,9 +441,9 @@ class FaucetTopoTestBase(FaucetTestBase):
             for link, ports in self.link_port_maps.items():
                 if link[0] in self.IGNORED_SWITCHES or link[1] in self.IGNORED_SWITCHES:
                     continue
+                dpid = self.topo.dpids_by_id[link[0]]
+                name = self.topo.switches_by_id[link[0]]
                 for port in ports:
-                    dpid = self.topo.dpids_by_id[link[0]]
-                    name = self.topo.switches_by_id[link[0]]
                     status = self.stack_port_status(dpid, name, port)
                     links += 1
                     if status == 3:  # STACK_STATE_UP
@@ -451,21 +451,8 @@ class FaucetTopoTestBase(FaucetTestBase):
             prop_up = links_up / links
             if prop_up >= prop:
                 return
+            time.sleep(1)
         self.fail("not enough links up: %f / %f" % (links_up, links))
-
-    def verify_stack_down(self):
-        """Verify all stack ports are down"""
-        links = 0
-        links_down = 0
-        for link, ports in self.link_port_maps.items():
-            for port in ports:
-                dpid = self.topo.dpids_by_id[link[0]]
-                name = self.topo.switches_by_id[link[0]]
-                status = self.stack_port_status(dpid, name, port)
-                links += 1
-                if status != 3:
-                    links_down += 1
-        self.assertEqual(links, links_down, "Not all links DOWN")
 
     def verify_one_stack_down(self, stack_offset_port, coldstart=False):
         """Test conditions when one stack port is down"""

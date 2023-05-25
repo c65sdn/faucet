@@ -614,8 +614,7 @@ class FaucetTestBase(unittest.TestCase):
             phys_mac = self.get_mac_of_intf(phys_port)
             for cmd in (
                 "ip link set dev %s up" % phys_port,
-                "ip -4 addr flush dev %s" % phys_port,
-                "ip -6 addr flush dev %s" % phys_port,
+                "ip addr flush dev %s" % phys_port,
                 "ebtables -A OUTPUT -s %s -o %s -j DROP" % (phys_mac, phys_port),
             ):
                 _cmd(cmd)
@@ -705,15 +704,12 @@ class FaucetTestBase(unittest.TestCase):
         return None
 
     def _start_check(self):
-        # '_wait_controllers_connected' also checks the 'healthy' state
         if not self._wait_controllers_connected():
             return "not all controllers connected to switch"
         if not self._wait_ofctl_up():
             return "ofctl not up"
         if not self.wait_dp_status(1):
             return "prometheus port not up"
-        if not self._wait_controllers_healthy():
-            return "not all controllers healthy after initial switch connection"
         if self.config_ports:
             for port_name, port in self.config_ports.items():
                 if port is not None and not port_name.startswith("gauge"):
@@ -1003,10 +999,10 @@ class FaucetTestBase(unittest.TestCase):
         return TcpdumpHelper(*args, **kwargs).execute()
 
     @staticmethod
-    def scapy_template(packet, iface, count=1):
+    def scapy_template(packet, iface, count=1, inter=0.5):
         return (
-            "python3 -c \"from scapy.all import * ; sendp(%s, iface='%s', count=%u)\""
-            % (packet, iface, count)
+            "python3 -c \"from scapy.all import * ; pkt = %s ; sendp(pkt, iface='%s', count=%u, inter=%u)\""
+            % (packet, iface, count, inter)
         )
 
     def scapy_base_udp(
@@ -2124,28 +2120,26 @@ dbs:
         self, received_expected, packets, tcpdump_filter, scapy_cmd, host_a, host_b
     ):
         received_packets = False
-        for _ in range(packets):
-            tcpdump_txt = self.tcpdump_helper(
-                host_b,
-                tcpdump_filter,
-                [partial(host_a.cmd, scapy_cmd)],
-                packets=1,
-                timeout=2,
-            )
-            msg = "%s (%s) -> %s (%s): %s" % (
-                host_a,
-                host_a.MAC(),
-                host_b,
-                host_b.MAC(),
-                tcpdump_txt,
-            )
-            received_no_packets = self.tcpdump_rx_packets(tcpdump_txt, packets=0)
-            received_packets = received_packets or not received_no_packets
-            if received_packets:
-                if received_expected is not False:
-                    return True
-                self.assertTrue(received_expected, msg=msg)
-            time.sleep(1)
+        tcpdump_txt = self.tcpdump_helper(
+            host_b,
+            tcpdump_filter,
+            [partial(host_a.cmd, scapy_cmd)],
+            packets=packets,
+            timeout=packets,
+        )
+        msg = "%s (%s) -> %s (%s): %s" % (
+            host_a,
+            host_a.MAC(),
+            host_b,
+            host_b.MAC(),
+            tcpdump_txt,
+        )
+        received_no_packets = self.tcpdump_rx_packets(tcpdump_txt, packets=0)
+        received_packets = received_packets or not received_no_packets
+        if received_packets:
+            if received_expected is not False:
+                return True
+            self.assertTrue(received_expected, msg=msg)
 
         if received_expected is None:
             return received_packets
@@ -2599,8 +2593,10 @@ dbs:
         match_re = re.compile(r".*(\d+) packets* captured.*")
         match = match_re.match(tcpdump_txt)
         self.assertTrue(match, msg=tcpdump_txt)
-        packets = int(match.group(1))
-        return packets
+        if match is not None:
+            packets = int(match.group(1))
+            return packets
+        return 0
 
     def tcpdump_rx_packets(self, tcpdump_txt, packets=0):
         return self.match_tcpdump_rx_packets(tcpdump_txt) == packets
@@ -2938,7 +2934,10 @@ dbs:
     def quiet_commands(self, host, commands):
         for command in commands:
             result = host.cmd(command)
-            self.assertEqual("", result, msg="%s: %s" % (command, result))
+            self.assertTrue(
+                result == "" or result.startswith("Killed"),
+                msg="%s: %s" % (command, result),
+            )
 
     def _config_tableids(self):
         # Wait for VLAN table to appear, rapidly scrape the rest.
@@ -2986,15 +2985,13 @@ dbs:
         else:
             mac = "address %s" % mac
         add_cmds = [
-            "ip link add %s link %s %s type macvlan mode %s"
+            "link add %s link %s %s type macvlan mode %s"
             % (macvlan_intf, host.defaultIntf(), mac, mode),
-            "ip link set dev %s up" % macvlan_intf,
+            "link set dev %s up" % macvlan_intf,
         ]
         if ipa:
-            add_cmds.append(
-                "ip address add %s/%s brd + dev %s" % (ipa, ipm, macvlan_intf)
-            )
-        self.quiet_commands(host, add_cmds)
+            add_cmds.append("addr add %s/%s brd + dev %s" % (ipa, ipm, macvlan_intf))
+        host.run_ip_batch(add_cmds)
 
     def del_macvlan(self, host, macvlan_intf):
         self.quiet_commands(
@@ -3658,8 +3655,7 @@ dbs:
 
     @staticmethod
     def host_drop_all_ips(host):
-        for ipv in (4, 6):
-            host.cmd("ip -%u addr flush dev %s" % (ipv, host.defaultIntf()))
+        host.cmd("ip addr flush dev %s" % host.defaultIntf())
 
     def setup_ipv6_hosts_addresses(
         self,

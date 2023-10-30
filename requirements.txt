@@ -6,6 +6,6 @@ influxdb>=2.12.0
 networkx>=1.9
 os_ken==2.7.0
 pbr>=1.9
-prometheus_client==0.17.1
+prometheus_client==0.18.0
 pytricia>=1.0.0
 ruamel.yaml==0.18.3

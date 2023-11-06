@@ -8,4 +8,4 @@ os_ken==2.7.0
 pbr>=1.9
 prometheus_client==0.18.0
 pytricia>=1.0.0
-ruamel.yaml==0.18.3
+ruamel.yaml==0.18.5

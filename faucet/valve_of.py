@@ -809,6 +809,9 @@ MATCH_FIELDS = {
     "tunnel_id": to_match_masked_int,
     "ipv6_exthdr": to_match_masked_int,
     # Nicira extensions, see ovs-fields(7)
+    "eth_type_nxm": str_to_int,
+    "ip_proto_nxm": str_to_int,
+    "nw_ttl": str_to_int,
     "ct_state": to_match_masked_int,
     "ct_zone": str_to_int,
     "ct_mark": to_match_masked_int,
@@ -1329,7 +1332,7 @@ def faucet_async(
     """Return async message config for FAUCET/Gauge"""
     packet_in_mask = 0
     if packet_in:
-        packet_in_mask = 1 << ofp.OFPR_ACTION
+        packet_in_mask = 1 << ofp.OFPR_ACTION | 1 << ofp.OFPR_INVALID_TTL
     port_status_mask = 0
     if port_status:
         port_status_mask = (

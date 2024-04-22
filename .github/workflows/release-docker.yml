@@ -5,6 +5,9 @@ on:
     types:
       - published
 
+env:
+  plaforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
+
 jobs:
   faucet-docker-image:
     name: "Build faucet docker image"
@@ -31,7 +34,7 @@ jobs:
           docker buildx build \
             --tag c65sdn/faucet:${{ github.event.release.tag_name }} \
             --tag c65sdn/faucet:latest \
-            --platform linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8 \
+            --platform ${{ env.PLATFORMS }} \
             --output "type=registry" \
             --file Dockerfile.faucet \
             .
@@ -62,7 +65,7 @@ jobs:
           docker buildx build \
             --tag c65sdn/gauge:${{ github.event.release.tag_name }} \
             --tag c65sdn/gauge:latest \
-            --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x \
+            --platform ${{ env.PLATFORMS }} \
             --output "type=registry" \
             --file Dockerfile.gauge \
             .
@@ -93,7 +96,7 @@ jobs:
           docker buildx build \
             --tag c65sdn/event-adapter-rabbitmq:${{ github.event.release.tag_name }} \
             --tag c65sdn/event-adapter-rabbitmq:latest \
-            --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x \
+            --platform ${{ env.PLATFORMS }} \
             --output "type=registry" \
             --file Dockerfile \
             .

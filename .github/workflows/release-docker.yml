@@ -16,7 +16,7 @@ jobs:
       name: "release"
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up qemu
         uses: docker/setup-qemu-action@v3
         with:
@@ -47,7 +47,7 @@ jobs:
     needs: faucet-docker-image
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up qemu
         uses: docker/setup-qemu-action@v3
         with:
@@ -77,7 +77,7 @@ jobs:
       name: "release"
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up qemu
         uses: docker/setup-qemu-action@v3
         with:
@@ -108,7 +108,7 @@ jobs:
       name: "release"
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up qemu
         uses: docker/setup-qemu-action@v3
         with:

@@ -1,17 +1,17 @@
 Faucet
 ======
 
-.. image:: https://github.com/faucetsdn/faucet/workflows/Unit%20tests/badge.svg?branch=master
+.. image:: https://github.com/faucetsdn/faucet/actions/workflows/tests-unit.yml/badge.svg
     :target: https://github.com/faucetsdn/faucet/actions?query=workflow%3A%22Unit+tests%22
 
-.. image:: https://github.com/faucetsdn/faucet/workflows/Integration%20tests/badge.svg?branch=master
+.. image:: https://github.com/faucetsdn/faucet/actions/workflows/tests-integration.yml/badge.svg
     :target: https://github.com/faucetsdn/faucet/actions?query=workflow%3A%22Integration+tests%22
 
 .. image:: https://codecov.io/gh/faucetsdn/faucet/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/faucetsdn/faucet
 
 
-FAUCET is an OpenFlow controller for multi table OpenFlow 1.3 switches, that implements layer 2 switching, VLANs, ACLs, and layer 3 IPv4 and IPv6 routing, static and via BGP. It is based on Waikato University's `Valve <https://github.com/wandsdn/valve>`_ and the `Ryu OpenFlow Controller <http://osrg.github.io/ryu/>`_. FAUCET's design and background is described in `ACM Queue <https://queue.acm.org/detail.cfm?id=3015763>`_.
+FAUCET is an OpenFlow controller for multi table OpenFlow 1.3 switches, that implements layer 2 switching, VLANs, ACLs, and layer 3 IPv4 and IPv6 routing, static and via BGP. It is based on Waikato University's `Valve <https://github.com/wandsdn/valve>`_ and the `Ryu OpenFlow Controller <https://ryu-sdn.org>`_. FAUCET's design and background is described in `ACM Queue <https://queue.acm.org/detail.cfm?id=3015763>`_.
 
 It supports:
 

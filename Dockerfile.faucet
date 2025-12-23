@@ -1,6 +1,6 @@
 ## Image name: faucet/faucet
 
-FROM c65sdn/python3:1.0.31
+FROM c65sdn/python3:1.0.32
 
 COPY ./ /faucet-src/
 

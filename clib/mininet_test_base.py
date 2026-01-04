@@ -427,7 +427,12 @@ class FaucetTestBase(unittest.TestCase):
         return mininet_test_util.flat_test_name(self.id())
 
     def _tmpdir_name(self):
-        tmpdir = os.path.join(self.root_tmpdir, self._test_name())
+        i = 0
+        while True:
+            tmpdir = os.path.join(self.root_tmpdir, "-".join((self._test_name(), str(i))))
+            if not os.path.exists(tmpdir):
+                break
+            i += 1
         os.mkdir(tmpdir)
         return tmpdir
 

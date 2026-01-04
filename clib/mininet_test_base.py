@@ -429,7 +429,9 @@ class FaucetTestBase(unittest.TestCase):
     def _tmpdir_name(self):
         i = 0
         while True:
-            tmpdir = os.path.join(self.root_tmpdir, "-".join((self._test_name(), str(i))))
+            tmpdir = os.path.join(
+                self.root_tmpdir, "-".join((self._test_name(), str(i)))
+            )
             if not os.path.exists(tmpdir):
                 break
             i += 1

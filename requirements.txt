@@ -6,5 +6,5 @@ networkx>=1.9
 pbr>=1.9
 prometheus_client==0.23.1
 ruamel.yaml==0.19.1
-os_ken==3.1.1
+os_ken==4.0.0
 pytricia>=1.0.0

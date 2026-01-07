@@ -9,7 +9,6 @@ Blogs
 Configuration
 -------------
 
- * `faucetagent <https://github.com/faucetsdn/faucetagent>`_ : gNMI agent for faucet configuration
  * `faucetconfrpc <https://github.com/IQTLabs/faucetconfrpc>`_ : RPC for Faucet configuration Files
 
 Integrations

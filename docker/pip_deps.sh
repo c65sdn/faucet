@@ -6,7 +6,7 @@ SCRIPTPATH=$(readlink -f "$0")
 SCRIPTDIR=$(dirname "${SCRIPTPATH}")
 BASEDIR=$(readlink -f "${SCRIPTDIR}/..")
 
-reqs="test-requirements.txt fuzz-requirements.txt adapters/vendors/rabbitmq/requirements.txt"
+reqs="test-requirements.txt fuzz-requirements.txt"
 pip_args=""
 
 for opt in "$@"; do

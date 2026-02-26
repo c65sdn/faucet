@@ -25,7 +25,6 @@ from mininet.link import TCIntf, Link
 
 from clib import mininet_test_util
 
-
 SWITCH_START_PORT = 5
 
 

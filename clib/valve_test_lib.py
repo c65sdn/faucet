@@ -294,48 +294,32 @@ BASE_DP_CONFIG = """
             max_per_interval: 1
 """
 
-BASE_DP1_CONFIG = (
-    """
+BASE_DP1_CONFIG = """
         dp_id: 1
-"""
-    + BASE_DP_CONFIG
-)
+""" + BASE_DP_CONFIG
 
-DP1_CONFIG = (
-    """
+DP1_CONFIG = """
         combinatorial_port_flood: True
-"""
-    + BASE_DP1_CONFIG
-)
+""" + BASE_DP1_CONFIG
 
-IDLE_DP1_CONFIG = (
-    """
+IDLE_DP1_CONFIG = """
         use_idle_timeout: True
-"""
-    + DP1_CONFIG
-)
+""" + DP1_CONFIG
 
-GROUP_DP1_CONFIG = (
-    """
+GROUP_DP1_CONFIG = """
         group_table: True
-"""
-    + BASE_DP1_CONFIG
-)
+""" + BASE_DP1_CONFIG
 
-DOT1X_CONFIG = (
-    """
+DOT1X_CONFIG = """
         dot1x:
             nfv_intf: lo
             nfv_sw_port: 2
             radius_ip: 127.0.0.1
             radius_port: 1234
             radius_secret: SECRET
-"""
-    + BASE_DP1_CONFIG
-)
+""" + BASE_DP1_CONFIG
 
-DOT1X_ACL_CONFIG = (
-    """
+DOT1X_ACL_CONFIG = """
         dot1x:
             nfv_intf: lo
             nfv_sw_port: 2
@@ -344,12 +328,9 @@ DOT1X_ACL_CONFIG = (
             radius_secret: SECRET
             auth_acl: auth_acl
             noauth_acl: noauth_acl
-"""
-    + BASE_DP1_CONFIG
-)
+""" + BASE_DP1_CONFIG
 
-CONFIG = (
-    """
+CONFIG = """
 dps:
     s1:
 %s
@@ -462,13 +443,10 @@ vlans:
         vid: 0x300
     v400:
         vid: 0x400
-"""
-    % DP1_CONFIG
-)
+""" % DP1_CONFIG
 
 
-STACK_CONFIG = (
-    """
+STACK_CONFIG = """
 dps:
     s1:
 %s
@@ -527,9 +505,7 @@ dps:
 vlans:
     v100:
         vid: 0x100
-    """
-    % DP1_CONFIG
-)
+    """ % DP1_CONFIG
 
 STACK_LOOP_CONFIG = """
 dps:
@@ -2500,8 +2476,7 @@ class ValveTestBases:
 
         def test_dp_acl_deny(self):
             """Test DP acl denies forwarding"""
-            acl_config = (
-                """
+            acl_config = """
 dps:
     s1:
         dp_acls: [drop_non_ospf_ipv4]
@@ -2543,9 +2518,7 @@ meters:
                         rate: 1
                     }
                 ]
-"""
-                % DP1_CONFIG
-            )
+""" % DP1_CONFIG
 
             drop_match = {
                 "in_port": 2,
@@ -2574,8 +2547,7 @@ meters:
 
         def test_dp_acl_deny_ordered(self):
             """Test DP acl denies forwarding"""
-            acl_config = (
-                """
+            acl_config = """
 dps:
     s1:
         dp_acls: [drop_non_ospf_ipv4]
@@ -2617,9 +2589,7 @@ meters:
                         rate: 1
                     }
                 ]
-"""
-                % DP1_CONFIG
-            )
+""" % DP1_CONFIG
 
             drop_match = {
                 "in_port": 2,
@@ -2648,8 +2618,7 @@ meters:
 
         def test_port_acl_deny(self):
             """Test that port ACL denies forwarding."""
-            acl_config = (
-                """
+            acl_config = """
 dps:
     s1:
 %s
@@ -2688,9 +2657,7 @@ meters:
                         rate: 1
                     }
                 ]
-"""
-                % DP1_CONFIG
-            )
+""" % DP1_CONFIG
 
             drop_match = {
                 "in_port": 2,

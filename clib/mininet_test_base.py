@@ -38,7 +38,6 @@ from clib.mininet_test_topo import FaucetLink
 from clib.tcpdump_helper import TcpdumpHelper
 from clib.valve_test_lib import yaml_load, yaml_dump
 
-
 MAX_TEST_VID = 512
 OFPVID_PRESENT = 0x1000
 MIN_FLAP_TIME = 1

@@ -209,8 +209,7 @@ def generate_prometheus_metric_table(_):
     }
 
     for module in ["faucet", "gauge"]:
-        block_text[module] = (
-            """\
+        block_text[module] = """\
 .. list-table:: {} prometheus metrics
     :widths: 40 10 55
     :header-rows: 1
@@ -218,10 +217,7 @@ def generate_prometheus_metric_table(_):
     * - Metric
       - Type
       - Description
-""".format(
-                module.title()
-            )
-        )
+""".format(module.title())
 
         # pylint: disable=protected-access
         for metric in metrics[module]._reg.collect():
@@ -230,15 +226,11 @@ def generate_prometheus_metric_table(_):
             else:
                 metric_name = metric.name
 
-            block_text[
-                module
-            ] += """\
+            block_text[module] += """\
     * - {}
       - {}
       - {}
-""".format(
-                metric_name, metric.type, metric.documentation
-            )
+""".format(metric_name, metric.type, metric.documentation)
 
         with open(output_path[module], "w", encoding="utf-8") as output_file:
             output_file.write(block_text[module])

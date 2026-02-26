@@ -62,26 +62,26 @@ def install_configs():
             if os.path.exists(old_ryu_conf) and os.path.isfile(old_ryu_conf):
                 print("Migrating %s to %s" % (old_ryu_conf, dst_ryu_conf))
                 shutil.copy(old_ryu_conf, dst_ryu_conf)
-            # else:
-            #    print("Copying %s to %s" % (src_ryu_conf, dst_ryu_conf))
-            #    shutil.copy(src_ryu_conf, dst_ryu_conf)
+            else:
+                print("Copying %s to %s" % (src_ryu_conf, dst_ryu_conf))
+                shutil.copy(src_ryu_conf, dst_ryu_conf)
 
     def setup_faucet_conf():
         if not os.path.exists(dst_faucet_conf_dir):
             print("Creating %s" % dst_faucet_conf_dir)
             os.makedirs(dst_faucet_conf_dir)
-        # for file_name in os.listdir(src_faucet_conf_dir):
-        #    src_file = os.path.join(src_faucet_conf_dir, file_name)
-        #    dst_file = os.path.join(dst_faucet_conf_dir, file_name)
-        #    alt_src = os.path.join(old_faucet_conf_dir, file_name)
-        #    if os.path.isfile(dst_file):
-        #        continue
-        #    if os.path.isfile(alt_src):
-        #        print("Migrating %s to %s" % (alt_src, dst_file))
-        #        shutil.copy(alt_src, dst_file)
-        #    elif os.path.isfile(src_file):
-        #        print("Copying %s to %s" % (src_file, dst_file))
-        #        shutil.copy(src_file, dst_file)
+        for file_name in os.listdir(src_faucet_conf_dir):
+            src_file = os.path.join(src_faucet_conf_dir, file_name)
+            dst_file = os.path.join(dst_faucet_conf_dir, file_name)
+            alt_src = os.path.join(old_faucet_conf_dir, file_name)
+            if os.path.isfile(dst_file):
+                continue
+            if os.path.isfile(alt_src):
+                print("Migrating %s to %s" % (alt_src, dst_file))
+                shutil.copy(alt_src, dst_file)
+            elif os.path.isfile(src_file):
+                print("Copying %s to %s" % (src_file, dst_file))
+                shutil.copy(src_file, dst_file)
 
     def setup_faucet_log():
         if not os.path.exists(faucet_log_dir):

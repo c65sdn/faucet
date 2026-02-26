@@ -31,7 +31,6 @@ from faucet.router import Router
 from faucet.vlan import VLAN
 from faucet.watcher_conf import WatcherConf
 
-
 V2_TOP_CONFS = ("acls", "dps", "meters", "routers", "vlans")
 
 

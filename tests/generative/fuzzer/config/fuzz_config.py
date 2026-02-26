@@ -2,7 +2,6 @@
 
 """Run AFL repeatedly with externally supplied generated config from STDIN."""
 
-
 import logging
 import tempfile
 import os
@@ -12,7 +11,6 @@ import afl
 
 from faucet import config_parser as cp
 from faucet.conf import InvalidConfigError
-
 
 ROUNDS = 50000
 LOGNAME = "FAUCET_FUZZER_LOG"

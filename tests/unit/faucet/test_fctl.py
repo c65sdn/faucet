@@ -111,9 +111,7 @@ class FctlTestCase(FctlTestCaseBase):
         """Test can filter by display labels."""
         expected_output = """
 learned_macs\t[('dp_id', '{dp_id}')]\t{mac_addr}
-""".format(
-            **self.DEFAULT_VALUES
-        ).strip()
+""".format(**self.DEFAULT_VALUES).strip()
 
         self.run_fctl(
             self.learned_macs_prom(),
@@ -165,7 +163,7 @@ class FctlClassTestCase(FctlTestCaseBase):
     def test_macs(self):
         """Test reporting of learned MACs."""
         self.write_prom_input_file(self.learned_macs_prom())
-        (endpoints, report_metrics, label_matches, nonzero_only, _) = fctl.parse_args(
+        endpoints, report_metrics, label_matches, nonzero_only, _ = fctl.parse_args(
             self.fctl_args()
         )
         metrics = fctl.scrape_prometheus(endpoints)

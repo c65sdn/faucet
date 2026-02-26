@@ -493,7 +493,7 @@ class FaucetStringOfDPLACPUntaggedTest(FaucetMultiDPTestBase):
         """Test lacp fail on reload with dynamic lacp status."""
 
         conf = self._get_faucet_conf()
-        (src_port, dst_port, fail_port, _) = self.lacp_ports()
+        src_port, dst_port, fail_port, _ = self.lacp_ports()
 
         self.wait_for_lacp_port_up(src_port, self.dpids[0], self.topo.switches_by_id[0])
         self.wait_for_lacp_port_up(dst_port, self.dpids[0], self.topo.switches_by_id[0])
@@ -519,7 +519,7 @@ class FaucetStringOfDPLACPUntaggedTest(FaucetMultiDPTestBase):
         """Test lacp passthrough on port fail."""
 
         conf = self._get_faucet_conf()
-        (src_port, dst_port, fail_port, end_port) = self.lacp_ports()
+        src_port, dst_port, fail_port, end_port = self.lacp_ports()
 
         interfaces_conf = conf["dps"][self.topo.switches_by_id[0]]["interfaces"]
         interfaces_conf[dst_port]["lacp_passthrough"] = [src_port]

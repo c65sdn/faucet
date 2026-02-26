@@ -2,7 +2,6 @@
 
 """Shows the crash in the FAUCET log produced by given input."""
 
-
 import sys
 from os_ken.controller import dpset
 from faucet import faucet

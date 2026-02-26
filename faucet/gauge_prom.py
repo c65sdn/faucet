@@ -27,7 +27,6 @@ from faucet.gauge_pollers import (
 )
 from faucet.prom_client import PromClient
 
-
 PROM_PREFIX_DELIM = "_"
 PROM_PORT_PREFIX = "of_port"
 PROM_PORT_STATE_VARS = (

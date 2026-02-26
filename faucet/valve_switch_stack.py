@@ -482,7 +482,7 @@ class ValveSwitchStackManagerBase(ValveSwitchManager):
             eth_dst: destination MAC address
         """
         ofmsgs = []
-        (src_rule_idle_timeout, src_rule_hard_timeout, _) = self._learn_host_timeouts(
+        src_rule_idle_timeout, src_rule_hard_timeout, _ = self._learn_host_timeouts(
             port, eth_src
         )
         src_match = self.eth_src_table.match(

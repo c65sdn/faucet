@@ -45,7 +45,6 @@ from faucet import valves_manager
 from faucet import faucet_metrics
 from faucet import valve_of
 
-
 EXPORT_RYU_CONFIGS = ["echo_request_interval", "maximum_unreplied_echo_requests"]
 
 

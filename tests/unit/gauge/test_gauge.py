@@ -697,8 +697,7 @@ dps:
         os.environ["FAUCET_CONFIG"] = os.path.join(self.tmpdir, "faucet.yaml")
         self._write_config(os.environ["FAUCET_CONFIG"], faucet_conf1)
         os.environ["GAUGE_CONFIG"] = os.path.join(self.tmpdir, "gauge.yaml")
-        gauge_conf = (
-            """
+        gauge_conf = """
 faucet_configs:
    - '%s'
 watchers:
@@ -721,9 +720,7 @@ dbs:
         type: 'prometheus'
         prometheus_addr: '0.0.0.0'
         prometheus_port: 0
-"""
-            % os.environ["FAUCET_CONFIG"]
-        )
+""" % os.environ["FAUCET_CONFIG"]
         self._write_config(os.environ["GAUGE_CONFIG"], gauge_conf)
         self.os_ken_app = gauge.Gauge(dpset={}, reg=CollectorRegistry())
         self.os_ken_app.reload_config(None)

@@ -153,8 +153,7 @@ dps:
 class ValveStackMCLAGTestCase(ValveTestBases.ValveTestNetwork):
     """Test stacked MCLAG"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -197,9 +196,7 @@ dps:
                 description: p4
                 native_vlan: 100
                 lacp: 1
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         """Setup basic loop config"""
@@ -436,8 +433,7 @@ dps:
 class ValveStackMCLAGRestartTestCase(ValveTestBases.ValveTestNetwork):
     """Test stacked MCLAG"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -480,9 +476,7 @@ dps:
                 description: p4
                 native_vlan: 100
                 lacp: 1
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         """Setup basic loop config"""
@@ -518,8 +512,7 @@ dps:
 class ValveStackMCLAGStandbyTestCase(ValveTestBases.ValveTestNetwork):
     """Test MCLAG with standby port option overrules unselected states"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -560,9 +553,7 @@ dps:
                 native_vlan: 100
                 lacp_standby: True
                 lacp: 1
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         """Setup basic loop config"""
@@ -598,8 +589,7 @@ dps:
 class ValveStackRootExtLoopProtectTestCase(ValveTestBases.ValveTestNetwork):
     """External loop protect test cases"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -642,9 +632,7 @@ dps:
                 description: p4
                 native_vlan: 100
                 loop_protect_external: True
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         self.setup_valves(self.CONFIG)
@@ -907,8 +895,7 @@ class ValveStackRedundantLink(ValveStackLoopTest):
 class ValveStackNonRootExtLoopProtectTestCase(ValveTestBases.ValveTestNetwork):
     """Test non-root external loop protect"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -960,9 +947,7 @@ dps:
             2:
                 description: p2
                 native_vlan: 100
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         self.setup_valves(self.CONFIG)
@@ -995,8 +980,7 @@ dps:
 class ValveStackAndNonStackTestCase(ValveTestBases.ValveTestNetwork):
     """Test stacked switches can exist with non-stacked switches"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -1033,9 +1017,7 @@ dps:
             2:
                 description: p2
                 native_vlan: 0x100
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         self.setup_valves(self.CONFIG)
@@ -4920,8 +4902,7 @@ dps:
 class ValveStackLLDPRestartTestCase(ValveTestBases.ValveTestNetwork):
     """Test restarting stacked LLDP"""
 
-    CONFIG = (
-        """
+    CONFIG = """
 dps:
     s1:
 %s
@@ -4950,9 +4931,7 @@ dps:
             2:
                 description: p2
                 native_vlan: 100
-"""
-        % BASE_DP1_CONFIG
-    )
+""" % BASE_DP1_CONFIG
 
     def setUp(self):
         """Setup basic loop config"""

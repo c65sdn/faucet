@@ -3,7 +3,7 @@ name: Build python packages for release
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 env:
   RELEASE_PY_VER: "3.12"

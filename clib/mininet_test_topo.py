@@ -754,16 +754,19 @@ socket_timeout=15
         ryu_pid = self.ryu_pid()
         if ryu_pid is not None:
             for ipv in (4, 6):
-                listening_pids = [
-                    int(pid)
-                    for pid in self.cmd(
-                        mininet_test_util.tcp_listening_cmd(
-                            port, ipv=ipv, state=state, pid=ryu_pid
-                        )
-                    ).split()
-                ]
-                if listening_pids:
-                    return True
+                try:
+                    listening_pids = [
+                        int(pid)
+                        for pid in self.cmd(
+                            mininet_test_util.tcp_listening_cmd(
+                                port, ipv=ipv, state=state, pid=ryu_pid
+                            )
+                        ).split()
+                    ]
+                    if listening_pids:
+                        return True
+                except AttributeError:
+                    continue
         return False
 
     # pylint: disable=invalid-name

@@ -18,7 +18,7 @@ if sys.version_info < (3,):
     print(
         """You are trying to install faucet on python {py}
 
-Faucet is not compatible with python 2, please upgrade to python 3.11 or newer.""".format(
+Faucet is not compatible with python 2, please upgrade to python 3.12 or newer.""".format(
             py=".".join([str(v) for v in sys.version_info[:3]])
         ),
         file=sys.stderr,

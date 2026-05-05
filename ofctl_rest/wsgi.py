@@ -276,15 +276,31 @@ class WSGIServer:
     """Stdlib-backed wrapper that mimics the API faucet expects.
 
     Replaces the previous ``hub.WSGIServer`` (which only existed on os-ken's
-    eventlet hub).
+    eventlet hub). Picks ``AF_INET6`` automatically when ``host`` is an
+    IPv6 address (the integration tests use ``::1``); otherwise the default
+    ``AF_INET`` is fine.
     """
 
     def __init__(self, application, host, port, **config):
         # pylint: disable=import-outside-toplevel
-        from wsgiref.simple_server import make_server
+        import socket
+        from wsgiref.simple_server import (
+            WSGIRequestHandler,
+            WSGIServer as _WSGIServer,
+        )
 
         del config  # unused; was forwarded to eventlet.wsgi
-        self._server = make_server(host, port, application)
+
+        server_class = _WSGIServer
+        if ":" in host:
+
+            class _IPv6WSGIServer(_WSGIServer):
+                address_family = socket.AF_INET6
+
+            server_class = _IPv6WSGIServer
+
+        self._server = server_class((host, port), WSGIRequestHandler)
+        self._server.set_app(application)
 
     def __call__(self):
         self.serve_forever()

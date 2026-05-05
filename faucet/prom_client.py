@@ -69,7 +69,11 @@ class PromClient:  # pylint: disable=too-few-public-methods
         if not self.server:
             app = make_wsgi_app(self._reg)
             # pylint: disable=import-outside-toplevel
-            from wsgiref.simple_server import make_server, WSGIRequestHandler
+            import socket
+            from wsgiref.simple_server import (
+                WSGIRequestHandler,
+                WSGIServer as _WSGIServer,
+            )
 
             class NoLoggingWSGIRequestHandler(WSGIRequestHandler):
                 """Don't log requests."""
@@ -79,11 +83,19 @@ class PromClient:  # pylint: disable=too-few-public-methods
                 ):  # pylint: disable=redefined-builtin
                     pass
 
-            self.server = make_server(
-                prom_addr,
-                int(prom_port),
-                app,
-                handler_class=NoLoggingWSGIRequestHandler,
+            server_class = _WSGIServer
+            if ":" in prom_addr:
+                # ``make_server`` defaults to AF_INET; pick AF_INET6 when
+                # the caller passes an IPv6 literal (e.g. ``::1`` from the
+                # integration tests).
+                class _IPv6WSGIServer(_WSGIServer):
+                    address_family = socket.AF_INET6
+
+                server_class = _IPv6WSGIServer
+
+            self.server = server_class(
+                (prom_addr, int(prom_port)), NoLoggingWSGIRequestHandler
             )
+            self.server.set_app(app)
             self.thread = hub.spawn(self.server.serve_forever)
             self.thread.name = "prometheus"

@@ -125,6 +125,12 @@ def print_version():
 
 
 def build_ryu_args(argv):
+    """Translate Faucet CLI flags into the os-ken cfg arguments.
+
+    Returns the list of ``--config-file=...`` style arguments and the
+    Ryu/os-ken application module names to load. Returns an empty list
+    when there is nothing to run (e.g. ``--version``).
+    """
     args = parse_args(argv[1:])
 
     # Checking version number?
@@ -168,6 +174,22 @@ def build_ryu_args(argv):
     return ryu_args
 
 
+def _maybe_load_user_flags(argv):
+    """Pre-import the file passed via ``--user-flags`` so it can register
+    additional oslo.config options before CLI parsing happens."""
+    try:
+        idx = list(argv).index("--user-flags")
+        user_flags_file = argv[idx + 1]
+    except (ValueError, IndexError):
+        return
+    if not (user_flags_file and os.path.isfile(user_flags_file)):
+        return
+    # pylint: disable=import-outside-toplevel
+    from os_ken.utils import _import_module_file
+
+    _import_module_file(user_flags_file)
+
+
 def _run_osken_manager(argv):
     """Run an in-process equivalent of the ``osken-manager`` script.
 
@@ -185,15 +207,18 @@ def _run_osken_manager(argv):
 
     # ``hub.patch`` must run before threading/socket modules are imported
     # on the eventlet hub, so keep these imports inside the function.
+    # pylint: disable=import-outside-toplevel
     from os_ken.lib import hub
 
     hub.patch(thread=False)
 
     from os_ken import __version__ as osken_version
     from os_ken import cfg
-    from os_ken import flags  # noqa: F401  (registers oslo.config options)
+    from os_ken import flags  # pylint: disable=unused-import  # registers cfg opts
     from os_ken import log
     from os_ken.base.app_manager import AppManager
+
+    del flags  # quiet linters: imported for its registration side-effect.
 
     log.early_init_log(logging.DEBUG)
 
@@ -222,17 +247,7 @@ def _run_osken_manager(argv):
         ]
     )
 
-    # ``--user-flags`` may register additional options, so import it before
-    # parsing CLI args.
-    try:
-        idx = list(argv).index("--user-flags")
-        user_flags_file = argv[idx + 1]
-    except (ValueError, IndexError):
-        user_flags_file = ""
-    if user_flags_file and os.path.isfile(user_flags_file):
-        from os_ken.utils import _import_module_file
-
-        _import_module_file(user_flags_file)
+    _maybe_load_user_flags(argv)
 
     try:
         conf(

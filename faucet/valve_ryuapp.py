@@ -29,7 +29,7 @@ from os_ken.controller.handler import set_ev_cls
 from os_ken.lib import hub
 
 from faucet import valve_of
-from faucet.valve_util import dpid_log, get_logger, get_setting
+from faucet.valve_util import dpid_log, get_logger, get_setting, thread_is_dead
 
 
 class ValveDeadThreadException(Exception):
@@ -79,7 +79,7 @@ class OSKenAppBase(app_manager.OSKenApp):
 
     def _check_thread_exception(self):
         """Check for a dead thread and cause/log an exception."""
-        dead_threads = [thread for thread in self._get_threads() if thread.dead]
+        dead_threads = [t for t in self._get_threads() if thread_is_dead(t)]
         if dead_threads:
             for thread in dead_threads:
                 thread_name = getattr(thread, "name", "unknown")

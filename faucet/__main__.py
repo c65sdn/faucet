@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
-"""Launch forwarder script for Faucet/Gauge"""
+"""Launch script for Faucet/Gauge.
+
+Hosts an in-process equivalent of the legacy ``osken-manager`` script so
+that Faucet keeps its existing CLI surface on os-ken >= 4.0, which removed
+the ``os_ken.cmd`` package and the ``osken-manager`` console script.
+"""
 
 # Copyright (C) 2015 Brad Cowie, Christopher Lorier and Joe Stringer.
 # Copyright (C) 2015 Research and Education Advanced Network New Zealand Ltd.
@@ -19,6 +24,7 @@
 # limitations under the License.
 
 import argparse
+import logging
 import os
 import sys
 
@@ -159,16 +165,125 @@ def build_ryu_args(argv):
     if args.ryu_app_lists:
         ryu_args.extend(args.ryu_app_lists)
 
-    # Replace current process with ryu-manager from PATH (no PID change).
-    ryu_args.insert(0, "osken-manager")
     return ryu_args
+
+
+def _run_osken_manager(argv):
+    """Run an in-process equivalent of the ``osken-manager`` script.
+
+    Mirrors ``os_ken.cmd.manager.main`` from os-ken < 4.0. os-ken 4.0
+    deleted the ``os_ken.cmd`` package along with the ``osken-manager``
+    console script entry point, so we drive ``AppManager`` directly using
+    the same building blocks (``cfg``, ``log``, ``flags``, ``hub``) which
+    are still exported.
+    """
+    # os-ken 4.0 flipped the default hub to ``native``, but Faucet still
+    # relies on eventlet semantics (greenlet ``thread.dead`` checks,
+    # ``hub.kill`` actually killing). Keep the eventlet hub until the
+    # native migration lands; an explicit env value still wins.
+    os.environ.setdefault("OSKEN_HUB_TYPE", "eventlet")
+
+    # ``hub.patch`` must run before threading/socket modules are imported
+    # on the eventlet hub, so keep these imports inside the function.
+    from os_ken.lib import hub
+
+    hub.patch(thread=False)
+
+    from os_ken import __version__ as osken_version
+    from os_ken import cfg
+    from os_ken import flags  # noqa: F401  (registers oslo.config options)
+    from os_ken import log
+    from os_ken.base.app_manager import AppManager
+
+    log.early_init_log(logging.DEBUG)
+
+    conf = cfg.CONF
+    conf.register_cli_opts(
+        [
+            cfg.ListOpt(
+                "app-lists", default=[], help="application module name to run"
+            ),
+            cfg.MultiStrOpt(
+                "app",
+                positional=True,
+                default=[],
+                help="application module name to run",
+            ),
+            cfg.StrOpt("pid-file", default=None, help="pid file name"),
+            cfg.BoolOpt(
+                "enable-debugger",
+                default=False,
+                help="don't overwrite Python standard threading library "
+                "(use only for debugging)",
+            ),
+            cfg.StrOpt(
+                "user-flags",
+                default=None,
+                help="Additional flags file for user applications",
+            ),
+        ]
+    )
+
+    # ``--user-flags`` may register additional options, so import it before
+    # parsing CLI args.
+    try:
+        idx = list(argv).index("--user-flags")
+        user_flags_file = argv[idx + 1]
+    except (ValueError, IndexError):
+        user_flags_file = ""
+    if user_flags_file and os.path.isfile(user_flags_file):
+        from os_ken.utils import _import_module_file
+
+        _import_module_file(user_flags_file)
+
+    try:
+        conf(
+            args=argv,
+            prog="faucet",
+            project="os_ken",
+            version="faucet %s" % osken_version,
+            default_config_files=["/usr/local/etc/os_ken/os_ken.conf"],
+        )
+    except cfg.ConfigFilesNotFoundError:
+        conf(
+            args=argv,
+            prog="faucet",
+            project="os_ken",
+            version="faucet %s" % osken_version,
+        )
+
+    log.init_log()
+    logger = logging.getLogger(__name__)
+
+    if not conf.enable_debugger:
+        hub.patch(thread=True)
+
+    if conf.pid_file:
+        with open(conf.pid_file, "w", encoding="utf-8") as pid_file:
+            pid_file.write(str(os.getpid()))
+
+    app_lists = conf.app_lists + conf.app
+    if not app_lists:
+        app_lists = ["os_ken.controller.ofp_handler"]
+
+    app_mgr = AppManager.get_instance()
+    app_mgr.load_apps(app_lists)
+    contexts = app_mgr.create_contexts()
+    services = list(app_mgr.instantiate_apps(**contexts))
+
+    try:
+        hub.joinall(services)
+    except KeyboardInterrupt:
+        logger.debug("Keyboard Interrupt received, shutting down")
+    finally:
+        app_mgr.close()
 
 
 def main():
     """Main program."""
     ryu_args = build_ryu_args(sys.argv)
     if ryu_args:
-        os.execvp(ryu_args[0], ryu_args)
+        _run_osken_manager(ryu_args)
 
 
 if __name__ == "__main__":

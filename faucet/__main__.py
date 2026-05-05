@@ -39,17 +39,6 @@ _self_real = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:] = [_p for _p in sys.path if os.path.realpath(_p) != _self_real]
 del _self_real
 
-# Faucet still relies on eventlet (greenthread ``thread.dead`` checks,
-# ``hub.kill``, beka/chewie). os-ken 4.0 flipped the default hub to
-# ``native``; pin back to eventlet (an explicit env still wins) and run
-# ``eventlet.monkey_patch()`` *before* importing ``argparse``/``logging`` so
-# eventlet doesn't log "RLock(s) were not greened".
-os.environ.setdefault("OSKEN_HUB_TYPE", "eventlet")
-if os.environ["OSKEN_HUB_TYPE"] == "eventlet":
-    import eventlet  # pylint: disable=import-error
-
-    eventlet.monkey_patch()
-
 import argparse
 import logging
 
@@ -224,11 +213,11 @@ def _run_osken_manager(argv):
     the same building blocks (``cfg``, ``log``, ``flags``, ``hub``) which
     are still exported.
     """
-    # ``OSKEN_HUB_TYPE`` is pinned and ``eventlet.monkey_patch()`` has
-    # already run at module top.
     # pylint: disable=import-outside-toplevel
     from os_ken.lib import hub
 
+    # No-op on the native hub; left as the documented entry point in case
+    # OSKEN_HUB_TYPE=eventlet is set explicitly in some environment.
     hub.patch(thread=False)
 
     from os_ken import __version__ as osken_version

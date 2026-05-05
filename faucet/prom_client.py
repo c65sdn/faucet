@@ -65,31 +65,25 @@ class PromClient:  # pylint: disable=too-few-public-methods
 
     def start(self, prom_port, prom_addr, use_test_thread=False):
         """Start webserver."""
+        # pylint: disable=unused-argument
         if not self.server:
             app = make_wsgi_app(self._reg)
-            if use_test_thread:
-                # pylint: disable=import-outside-toplevel
-                from wsgiref.simple_server import make_server, WSGIRequestHandler
-                import threading
+            # pylint: disable=import-outside-toplevel
+            from wsgiref.simple_server import make_server, WSGIRequestHandler
 
-                class NoLoggingWSGIRequestHandler(WSGIRequestHandler):
-                    """Don't log requests."""
+            class NoLoggingWSGIRequestHandler(WSGIRequestHandler):
+                """Don't log requests."""
 
-                    def log_message(
-                        self, format, *args
-                    ):  # pylint: disable=redefined-builtin
-                        pass
+                def log_message(
+                    self, format, *args
+                ):  # pylint: disable=redefined-builtin
+                    pass
 
-                self.server = make_server(
-                    prom_addr,
-                    int(prom_port),
-                    app,
-                    handler_class=NoLoggingWSGIRequestHandler,
-                )
-                self.thread = threading.Thread(target=self.server.serve_forever)
-                self.thread.daemon = True
-                self.thread.start()
-            else:
-                self.server = hub.WSGIServer((prom_addr, int(prom_port)), app)
-                self.thread = hub.spawn(self.server.serve_forever)
+            self.server = make_server(
+                prom_addr,
+                int(prom_port),
+                app,
+                handler_class=NoLoggingWSGIRequestHandler,
+            )
+            self.thread = hub.spawn(self.server.serve_forever)
             self.thread.name = "prometheus"

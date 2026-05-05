@@ -19,11 +19,11 @@
 
 import json
 import os
+import queue
 import socket
+import threading
 import time
 from contextlib import contextmanager
-
-import eventlet
 
 from os_ken.lib import hub
 from os_ken.lib.hub import StreamServer
@@ -33,7 +33,7 @@ class NonBlockLock:
     """Non blocking lock that can be used as a context manager."""
 
     def __init__(self):
-        self._lock = eventlet.semaphore.Semaphore()
+        self._lock = threading.Semaphore()
 
     @contextmanager
     def acquire_nonblock(self):
@@ -58,7 +58,7 @@ class FaucetEventNotifier:
         self.event_id = 0
         self.thread = None
         self.lock = NonBlockLock()
-        self.event_q = eventlet.queue.Queue(120)
+        self.event_q = queue.Queue(maxsize=120)
 
     def start(self):
         """Start socket server."""

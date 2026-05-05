@@ -31,6 +31,20 @@ from os_ken.lib import hub
 from faucet import valve_of
 from faucet.valve_util import dpid_log, get_logger, get_setting, thread_is_dead
 
+# Under os-ken's native hub, ``hub.spawn`` returns a real
+# ``threading.Thread`` that isn't a daemon, so the Python interpreter waits
+# for the background loops faucet spawns (config-file watcher, BGP, 802.1x,
+# Prometheus, etc.) at exit and the process never terminates. Flip the
+# default before any spawn happens; under eventlet this branch is skipped.
+if getattr(hub, "HUB_TYPE", None) == "native" and hasattr(hub, "HubThread"):
+    _orig_hub_thread_init = hub.HubThread.__init__
+
+    def _daemon_hub_thread_init(self, *args, **kwargs):
+        _orig_hub_thread_init(self, *args, **kwargs)
+        self.daemon = True
+
+    hub.HubThread.__init__ = _daemon_hub_thread_init
+
 
 class ValveDeadThreadException(Exception):
     """Exception raised when a dead thread is detected."""

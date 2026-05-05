@@ -18,12 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint: disable=using-constant-test,wrong-import-order,wrong-import-position
-import eventlet
-
-if True:  # A trick to satisfy linting for E402
-    eventlet.monkey_patch()
-
 import time
 
 from functools import partial

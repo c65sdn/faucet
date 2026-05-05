@@ -31,11 +31,13 @@ import sys
 # mininet integration tests start Faucet) Python puts the script's directory
 # at ``sys.path[0]``, which shadows the ``faucet`` package with the
 # ``faucet/faucet.py`` *submodule*. ``import faucet.valve_ryuapp`` then fails
-# with "'faucet' is not a package". Strip the entry before any other import.
-_self_dir = os.path.dirname(os.path.abspath(__file__))
-while _self_dir in sys.path:
-    sys.path.remove(_self_dir)
-del _self_dir
+# with "'faucet' is not a package". Strip every ``sys.path`` entry that
+# resolves to the script's directory (CI also explicitly puts
+# ``/faucet-src/faucet`` on ``PYTHONPATH`` via ``docker/runtests.sh``, and
+# Docker bind-mounts may surface that same dir under aliased paths).
+_self_real = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+sys.path[:] = [_p for _p in sys.path if os.path.realpath(_p) != _self_real]
+del _self_real
 
 # Faucet still relies on eventlet (greenthread ``thread.dead`` checks,
 # ``hub.kill``, beka/chewie). os-ken 4.0 flipped the default hub to

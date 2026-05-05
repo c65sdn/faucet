@@ -397,7 +397,7 @@ class GaugeThreadPollerTest(unittest.TestCase):  # pytype: disable=module-attr
         poller_thread = self.poller.thread
         hub.sleep(self.interval + 1)
         self.assertTrue(self.send_called)
-        self.assertFalse(poller_thread.dead)
+        self.assertFalse(valve_util.thread_is_dead(poller_thread))
 
     def test_stop(self):
         """Check if a poller can be stopped"""
@@ -409,7 +409,7 @@ class GaugeThreadPollerTest(unittest.TestCase):  # pytype: disable=module-attr
         hub.sleep(self.interval + 1)
 
         self.assertFalse(self.send_called)
-        self.assertTrue(poller_thread.dead)
+        self.assertTrue(valve_util.thread_is_dead(poller_thread))
 
     def test_active(self):
         """Check if active reflects the state of the poller"""

@@ -48,6 +48,18 @@ def utf8_decode(msg_str):
     return msg_str.decode("utf-8", errors="replace")
 
 
+def thread_is_dead(thread):
+    """Return True if a hub thread has terminated.
+
+    Bridges the os-ken eventlet ``GreenThread`` (``.dead`` property) and
+    the os-ken native ``HubThread`` (``threading.Thread.is_alive``) APIs
+    so callers don't need to know which hub is in use.
+    """
+    if hasattr(thread, "dead"):
+        return bool(thread.dead)
+    return not thread.is_alive()
+
+
 def get_sys_prefix():
     """Returns an additional prefix for log and configuration files when used in
     a virtual environment"""

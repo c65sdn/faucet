@@ -3,7 +3,7 @@ c65chewie==1.0.5
 https://github.com/faucetsdn/python3-fakencclient/archive/main.tar.gz#egg=ncclient
 eventlet>=0.34.3; python_version >= "3.12"
 networkx>=3.6.1
-pbr>=1.9
+pbr>=7.0.3
 prometheus_client==0.25.0
 ruamel.yaml==0.19.1
 os_ken>=4.1.1

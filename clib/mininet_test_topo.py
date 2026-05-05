@@ -8,13 +8,20 @@ import select
 import socket
 import string
 import shutil
-import subprocess
 import tempfile
 import time
 
 import netifaces
 
 # pylint: disable=too-many-arguments
+# Mininet's Host/Link/OVSSwitch APIs are camelCase, define attributes
+# outside ``__init__``, and read ``self.shell`` before our overrides set
+# it; we follow those conventions in subclasses below, so silence the
+# pylint rules that don't translate to vendored mininet code.
+# pylint: disable=invalid-name
+# pylint: disable=attribute-defined-outside-init
+# pylint: disable=access-member-before-definition
+# pylint: disable=too-few-public-methods
 
 from mininet.log import output, warn, error
 from mininet.topo import Topo
@@ -167,7 +174,7 @@ class FaucetHost(Host):
         self.cmd("unset HISTFILE; stty -echo; set +m")
 
     def terminate(self):
-        # If any 'dnsmasq' processes were started, terminate them now
+        """Stop any helper daemons (e.g. dnsmasq) before tearing down the host."""
         for pid_file in self.pid_files:
             with open(pid_file, "r", encoding="utf-8") as pf:
                 for _, pid in enumerate(pf):
@@ -224,9 +231,10 @@ class FaucetHost(Host):
         return self.cmd("hostname -I")
 
     def run_ip_batch(self, cmds):
+        """Run a batch of ``ip`` commands via ``ip -b``."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cmd_filename = os.path.join(tmpdir, "ipcmds.txt")
-            with open(cmd_filename, "w") as cmd_file:
+            with open(cmd_filename, "w", encoding="utf-8") as cmd_file:
                 cmd_file.write("\n".join(cmds))
             result = self.cmd("ip -b %s" % cmd_filename)
             assert result == "", (cmds, result)
@@ -359,6 +367,7 @@ class FaucetSwitch(OVSSwitch):
         self.cmd("ovs-vsctl set Interface", intf, "ofport_request=%s" % port)
 
     def add_controller(self, controller):
+        """Append a controller to this switch's controller list and apply it."""
         self.clist.append(
             (
                 self.name + controller.name,
@@ -379,8 +388,12 @@ class FaucetSwitch(OVSSwitch):
         self.vsctl(cargs + " -- set bridge %s controller=[%s]" % (self, cids))
 
     def start(self, controllers):
-        # Transcluded from Mininet source, since need to insert
-        # controller parameters at switch creation time.
+        # pylint: disable=too-many-locals
+        """Start the OVS bridge and connect it to ``controllers``.
+
+        Transcluded from Mininet's source so that controller parameters
+        can be inserted at switch-creation time.
+        """
         int(self.dpid, 16)  # DPID must be a hex string
         switch_intfs = [
             intf for intf in self.intfList() if self.ports[intf] and not intf.IP()
@@ -425,9 +438,9 @@ class FaucetSwitch(OVSSwitch):
         with tempfile.TemporaryDirectory() as tmpdir:
             sysctl_filename = os.path.join(tmpdir, "sysctl.txt")
             ip_batch_filename = os.path.join(tmpdir, "ipbatch.txt")
-            with open(sysctl_filename, "w") as sysctl_file:
+            with open(sysctl_filename, "w", encoding="utf-8") as sysctl_file:
                 sysctl_file.write("\n".join(sysctls))
-            with open(ip_batch_filename, "w") as ip_batch_file:
+            with open(ip_batch_filename, "w", encoding="utf-8") as ip_batch_file:
                 ip_batch_file.write("\n".join(ipcmds))
             self.cmd("sysctl -p %s" % sysctl_filename)
             result = self.cmd("ip -b %s" % ip_batch_filename)
@@ -800,6 +813,12 @@ socket_timeout=15
 
     def start(self):
         """Start tcpdump for OF port and then start controller."""
+        # Each restart spawns a fresh Faucet process with a new pid; drop
+        # any cached value so ryu_pid() re-reads the new pid file. Without
+        # this, the test framework's _start_faucet retry loop polls lsof
+        # against the dead pid from attempt 1 and all subsequent attempts
+        # are guaranteed to time out with "not all controllers connected".
+        self.cached_ryu_pid = None
         self._start_tcpdump()
         super().start()
 

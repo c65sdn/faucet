@@ -58,13 +58,6 @@ SUPPORTS_METADATA = (DEFAULT_HARDWARE,)
 
 EXTERNAL_DEPENDENCIES = (
     (
-        "osken-manager",
-        ["--version"],
-        "osken-manager",
-        r"osken-manager\s+(\d+\.\d+\.\d+)\n",
-        "2.1",
-    ),
-    (
         "ovs-vsctl",
         ["--version"],
         "Open vSwitch",

@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+# Faucet's own code still depends on eventlet semantics (see faucet/faucet.py
+# eventlet.monkey_patch and the .dead checks in valve_ryuapp/test_gauge), and
+# os-ken 4.0 flipped the default hub from eventlet to native. Pin the hub
+# back to eventlet for tests until those eventlet assumptions are removed.
+export OSKEN_HUB_TYPE=eventlet
+
 MINCOVERAGE=91
 
 SCRIPTPATH=$(readlink -f "$0")

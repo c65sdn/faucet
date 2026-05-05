@@ -19,6 +19,10 @@ if [ "$(uname -m)" = "x86_64" ]; then
   (
   echo "Running unit tests"
   cd "${FROOT}"
+  # Faucet's own code still relies on eventlet semantics; os-ken 4.0+
+  # defaults the hub to native, which breaks .dead-style checks. Pin to
+  # the eventlet hub for tests until those assumptions are removed.
+  export OSKEN_HUB_TYPE=eventlet
   python3 -m unittest discover "tests/unit/faucet/"
   python3 -m unittest discover "tests/unit/gauge/"
   )
@@ -38,7 +42,6 @@ rm -r "${HOME}/.cache"
 rm -r "${FROOT}"
 rm -r /usr/local/lib/python3*/site-packages/os_ken/tests/
 rm -r /usr/local/lib/python3*/site-packages/os_ken/lib/of_config/
-rm /usr/local/lib/python3*/site-packages/os_ken/cmd/of_config_cli.py
 
 # Smoke test
 faucet -V || exit 1

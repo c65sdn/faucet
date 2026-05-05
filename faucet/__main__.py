@@ -200,9 +200,7 @@ def _run_osken_manager(argv):
     conf = cfg.CONF
     conf.register_cli_opts(
         [
-            cfg.ListOpt(
-                "app-lists", default=[], help="application module name to run"
-            ),
+            cfg.ListOpt("app-lists", default=[], help="application module name to run"),
             cfg.MultiStrOpt(
                 "app",
                 positional=True,

@@ -23,10 +23,33 @@ the ``os_ken.cmd`` package and the ``osken-manager`` console script.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
-import logging
+# pylint: disable=wrong-import-position
 import os
 import sys
+
+# When invoked as ``python /path/to/faucet/__main__.py`` (which is how the
+# mininet integration tests start Faucet) Python puts the script's directory
+# at ``sys.path[0]``, which shadows the ``faucet`` package with the
+# ``faucet/faucet.py`` *submodule*. ``import faucet.valve_ryuapp`` then fails
+# with "'faucet' is not a package". Strip the entry before any other import.
+_self_dir = os.path.dirname(os.path.abspath(__file__))
+while _self_dir in sys.path:
+    sys.path.remove(_self_dir)
+del _self_dir
+
+# Faucet still relies on eventlet (greenthread ``thread.dead`` checks,
+# ``hub.kill``, beka/chewie). os-ken 4.0 flipped the default hub to
+# ``native``; pin back to eventlet (an explicit env still wins) and run
+# ``eventlet.monkey_patch()`` *before* importing ``argparse``/``logging`` so
+# eventlet doesn't log "RLock(s) were not greened".
+os.environ.setdefault("OSKEN_HUB_TYPE", "eventlet")
+if os.environ["OSKEN_HUB_TYPE"] == "eventlet":
+    import eventlet  # pylint: disable=import-error
+
+    eventlet.monkey_patch()
+
+import argparse
+import logging
 
 from pbr.version import VersionInfo
 
@@ -199,14 +222,8 @@ def _run_osken_manager(argv):
     the same building blocks (``cfg``, ``log``, ``flags``, ``hub``) which
     are still exported.
     """
-    # os-ken 4.0 flipped the default hub to ``native``, but Faucet still
-    # relies on eventlet semantics (greenlet ``thread.dead`` checks,
-    # ``hub.kill`` actually killing). Keep the eventlet hub until the
-    # native migration lands; an explicit env value still wins.
-    os.environ.setdefault("OSKEN_HUB_TYPE", "eventlet")
-
-    # ``hub.patch`` must run before threading/socket modules are imported
-    # on the eventlet hub, so keep these imports inside the function.
+    # ``OSKEN_HUB_TYPE`` is pinned and ``eventlet.monkey_patch()`` has
+    # already run at module top.
     # pylint: disable=import-outside-toplevel
     from os_ken.lib import hub
 

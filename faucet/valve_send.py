@@ -21,6 +21,7 @@ hanging the controller).
 
 import queue
 import threading
+import time
 
 from os_ken.ofproto import ofproto_v1_3_parser as parser
 
@@ -101,6 +102,7 @@ class BarrierAwareSender:
         # by which point the reply could already be in flight.
         xid = self.ryu_dp.set_xid(ofmsg)
         event = self.valves_manager.register_barrier(self.dp_id, xid)
+        sent_at = time.monotonic()
         try:
             self.ryu_dp.send_msg(ofmsg)
             if not event.wait(self.barrier_timeout):
@@ -113,6 +115,12 @@ class BarrierAwareSender:
                 )
                 self.ryu_dp.close()
                 return False
+            self.logger.info(
+                "barrier xid=%u on dp %016x acked in %.3fs",
+                xid,
+                self.dp_id,
+                time.monotonic() - sent_at,
+            )
             return True
         finally:
             # complete_barrier removes on hit; on miss/cancel we still

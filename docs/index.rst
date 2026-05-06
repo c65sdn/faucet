@@ -26,6 +26,7 @@ Developer Documentation
    architecture
    testing
    fuzzing
+   block_on_barrier
    source/index
 
 Indices and tables

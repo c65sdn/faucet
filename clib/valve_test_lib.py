@@ -813,10 +813,15 @@ class ValveTestBases:
                 self._verify_redundant_safe_offset_ofmsgs(ofmsgs, dp_id, offset)
             return final_ofmsgs
 
-        def send_flows_to_dp_by_id(self, valve, flows):
+        def send_flows_to_dp_by_id(self, valve, flows, on_complete=None):
             """Callback function for ValvesManager to simulate sending flows to a DP"""
             flows = valve.prepare_send_flows(flows)
             self.last_flows_to_dp[valve.dp.dp_id] = flows
+            if on_complete is not None:
+                # Real send path defers this to the per-DP sender thread
+                # once the trailing barrier acks; the unit harness has
+                # no wire, so signal completion synchronously.
+                on_complete()
 
         def configure_network(self):
             """Creates the FakeOFNetwork"""

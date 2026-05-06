@@ -257,6 +257,83 @@ class BarrierAwareSenderTestCase(unittest.TestCase):
         self.assertEqual(len(ryu_dp.sent), 5)
         self.assertEqual(dict(manager._barrier_waiters), {})
 
+    def test_on_complete_fires_after_trailing_barrier(self):
+        """on_complete must run only after the batch's trailing barrier
+        is acked. If the caller didn't add a barrier, the sender adds
+        one so completion really means "switch acked the last message"."""
+        ryu_dp = FakeRyuDp(0x5678)
+        manager = _make_manager()
+        sender = self._spawn(ryu_dp, manager)
+        done = threading.Event()
+        sender.submit([_flow(), _flow()], on_complete=done.set)
+
+        # Sender appends a barrier because the batch lacks one. The
+        # callback must NOT have fired before the barrier is acked.
+        self._wait_for_barrier(ryu_dp)
+        time.sleep(0.05)
+        self.assertFalse(
+            done.is_set(),
+            "on_complete fired before barrier reply",
+        )
+        with ryu_dp._send_lock:
+            barrier_xid = next(
+                m.xid
+                for m in ryu_dp.sent
+                if isinstance(m, valve_of.parser.OFPBarrierRequest)
+            )
+        manager.complete_barrier(ryu_dp.id, barrier_xid)
+        self.assertTrue(done.wait(1.0), "on_complete did not fire after ack")
+        with ryu_dp._send_lock:
+            kinds = [type(m).__name__ for m in ryu_dp.sent]
+        self.assertEqual(
+            kinds,
+            ["OFPFlowMod", "OFPFlowMod", "OFPBarrierRequest"],
+            "expected sender to append a final barrier",
+        )
+
+    def test_on_complete_does_not_double_barrier(self):
+        """If the caller-supplied batch already ends with a barrier, the
+        sender must not append a second one."""
+        ryu_dp = FakeRyuDp(0x9ABC)
+        manager = _make_manager()
+        sender = self._spawn(ryu_dp, manager)
+        done = threading.Event()
+        sender.submit([_flow(), valve_of.barrier()], on_complete=done.set)
+        self._wait_for_barrier(ryu_dp)
+
+        with ryu_dp._send_lock:
+            barriers = [
+                m
+                for m in ryu_dp.sent
+                if isinstance(m, valve_of.parser.OFPBarrierRequest)
+            ]
+        self.assertEqual(len(barriers), 1, "sender double-added a barrier")
+        manager.complete_barrier(ryu_dp.id, barriers[0].xid)
+        self.assertTrue(done.wait(1.0), "on_complete did not fire after ack")
+
+    def test_on_complete_skipped_on_channel_drop(self):
+        """If the channel is torn down mid-batch, on_complete must not
+        fire (reconnect will re-push and re-register a callback)."""
+        ryu_dp = FakeRyuDp(0xDEAD0001)
+        manager = _make_manager()
+        sender = self._spawn(ryu_dp, manager, timeout=0.1)
+        fired = threading.Event()
+        sender.submit(
+            [_flow(), valve_of.barrier(), _flow()],
+            on_complete=fired.set,
+        )
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not ryu_dp.closed:
+            time.sleep(0.02)
+        self.assertTrue(ryu_dp.closed, "expected channel close on timeout")
+        # Give the worker a moment to (incorrectly) run the callback.
+        time.sleep(0.1)
+        self.assertFalse(
+            fired.is_set(),
+            "on_complete fired despite barrier-timeout channel drop",
+        )
+
 
 class BarrierWaiterRegistryTestCase(unittest.TestCase):
     """Smaller direct exercise of the ValvesManager waiter API."""

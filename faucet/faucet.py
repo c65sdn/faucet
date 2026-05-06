@@ -202,13 +202,17 @@ class Faucet(OSKenAppBase):
         )
 
     @kill_on_exception(exc_logname)
-    def _send_flow_msgs(self, valve, flow_msgs, ryu_dp=None):
+    def _send_flow_msgs(self, valve, flow_msgs, ryu_dp=None, on_complete=None):
         """Send OpenFlow messages to a connected datapath.
 
         Args:
             Valve instance or None.
             flow_msgs (list): OpenFlow messages to send.
             ryu_dp: Override datapath from DPSet.
+            on_complete: callback fired from the sender thread once the
+                batch's trailing barrier is acked. Skipped when the DP
+                is offline (the caller's config_applied flag stays
+                False, matching the old dyn_running gate).
         """
         if ryu_dp is None:
             ryu_dp = self.dpset.get(valve.dp.dp_id)
@@ -216,7 +220,11 @@ class Faucet(OSKenAppBase):
             valve.logger.error("send_flow_msgs: DP not up")
             return
         valve.send_flows(
-            ryu_dp, flow_msgs, time.time(), valves_manager=self.valves_manager
+            ryu_dp,
+            flow_msgs,
+            time.time(),
+            valves_manager=self.valves_manager,
+            on_complete=on_complete,
         )
 
     def _get_valve(self, ryu_event, require_running=False):

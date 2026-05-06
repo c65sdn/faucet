@@ -149,9 +149,48 @@ Unit, in ``tests/unit/faucet/test_valve_send.py``:
 * no-barrier batch -- passes through without ever touching the waiter
   registry.
 
-Integration: the three meter tests previously skipped on the native
-hub (``FaucetUntaggedApplyMeterTest``, ``FaucetUntaggedMeterAddTest``,
-``FaucetUntaggedMeterModTest``) are re-enabled.
+Integration: the three meter tests
+(``FaucetUntaggedApplyMeterTest``, ``FaucetUntaggedMeterAddTest``,
+``FaucetUntaggedMeterModTest``) **remain skipped** -- see below.
+
+Limit: OVS userspace barrier vs. meter table
+--------------------------------------------
+
+Block-on-barrier is necessary for ordering correctness against
+spec-compliant OF switches. It is **not** sufficient for the
+``OFPMMFC_INVALID_METER`` race that the three meter integration tests
+exercise on userspace OVS. Empirically -- with a debug log added to
+the sender to record the round-trip on every barrier -- we observed:
+
+* The controller sent the meter ADD (``OFPMC_ADD``) followed by a
+  ``OFPBarrierRequest``.
+* OVS replied to that barrier in 0.000s -- 0.030s.
+* The waiter on the controller side unblocked and sent the next
+  message kind: a ``OFPFlowMod`` whose ``OFPIT_METER`` instruction
+  references that meter.
+* OVS rejected that flow_mod with
+  ``OFPMMFC_INVALID_METER``.
+
+In other words, the barrier reply arrived *before* the meter table
+commit had landed in OVS userspace's internal data structures. The OF
+spec is unambiguous (the switch must complete preceding messages
+before sending the reply); userspace OVS is treating the meter
+pipeline as outside the barrier fence.
+
+Block-on-barrier is the correct controller-side fix, and it does
+gate every other kind of cross-table ordering hazard, but for the
+specific OVS userspace + meter combination the only options are:
+
+* skip the meter integration tests (current behaviour, with this
+  document as the breadcrumb);
+* run those tests against the OVS kernel datapath, which doesn't have
+  the same separation; or
+* fix OVS userspace to fence meter operations under the barrier
+  contract -- the long-term resolution.
+
+The diagnostic that confirmed this lives at ``logger.debug`` in
+``BarrierAwareSender._send_barrier``; raise the faucet logger to
+``DEBUG`` if you need to re-run the trace.
 
 Risks and trade-offs
 --------------------

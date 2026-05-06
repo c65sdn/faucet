@@ -115,7 +115,7 @@ class BarrierAwareSender:
                 )
                 self.ryu_dp.close()
                 return False
-            self.logger.info(
+            self.logger.debug(
                 "barrier xid=%u on dp %016x acked in %.3fs",
                 xid,
                 self.dp_id,

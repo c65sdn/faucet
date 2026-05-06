@@ -19,10 +19,6 @@ if [ "$(uname -m)" = "x86_64" ]; then
   (
   echo "Running unit tests"
   cd "${FROOT}"
-  # Faucet's own code still relies on eventlet semantics; os-ken 4.0+
-  # defaults the hub to native, which breaks .dead-style checks. Pin to
-  # the eventlet hub for tests until those assumptions are removed.
-  export OSKEN_HUB_TYPE=eventlet
   python3 -m unittest discover "tests/unit/faucet/"
   python3 -m unittest discover "tests/unit/gauge/"
   )
@@ -34,8 +30,6 @@ pip3 uninstall -y ${TESTDEPS} || exit 1
 for i in ${BUILDDEPS} ; do
   ${APK} del "$i" || exit 1
 done
-# Needed by greenlet.
-apk add libstdc++
 
 # Clean up
 rm -r "${HOME}/.cache"

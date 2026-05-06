@@ -18,6 +18,7 @@
 
 import logging
 import random
+import threading
 import time
 
 from os_ken.lib import hub
@@ -162,18 +163,22 @@ class GaugeThreadPoller(GaugePoller):
         self.thread = None
         self.interval = self.conf.interval
         self.ryudp = None
+        # Cooperative stop signal. ``hub.kill`` is a documented no-op on
+        # the native hub, so the run loop has to bail on its own.
+        self._stop_event = threading.Event()
 
     def start(self, ryudp, active):
         self.stop()
         super().start(ryudp, active)
         if active:
+            self._stop_event.clear()
             self.thread = hub.spawn(self)
             self.thread.name = "GaugeThreadPoller"
 
     def stop(self):
         super().stop()
         if self.is_active():
-            hub.kill(self.thread)
+            self._stop_event.set()
             hub.joinall([self.thread])
             self.thread = None
 
@@ -187,11 +192,13 @@ class GaugeThreadPoller(GaugePoller):
         Then sends a request to the datapath, waits the specified interval and
         checks that a response has been received in a loop."""
         # TODO: this should use a deterministic method instead of random
-        hub.sleep(random.randint(1, self.conf.interval))
+        if self._stop_event.wait(timeout=random.randint(1, self.conf.interval)):
+            return
         while True:
             self.send_req()
             self.reply_pending = True
-            hub.sleep(self.conf.interval)
+            if self._stop_event.wait(timeout=self.conf.interval):
+                return
             if self.reply_pending:
                 self.no_response()
 

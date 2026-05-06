@@ -18,7 +18,6 @@
 # pylint: disable=import-outside-toplevel,disable=too-few-public-methods
 
 import inspect
-from types import MethodType
 
 from routes import Mapper
 from routes.util import URLGenerator
@@ -80,61 +79,13 @@ class Response(webob_Response):
         super().__init__(*args, **kwargs, charset=charset)
 
 
-class WebSocketRegistrationWrapper:
-    def __init__(self, func, controller):
-        self._controller = controller
-        self._controller_method = MethodType(func, controller)
-
-    def __call__(self, ws):
-        wsgi_application = self._controller.parent
-        ws_manager = wsgi_application.websocketmanager
-        ws_manager.add_connection(ws)
-        try:
-            self._controller_method(ws)
-        finally:
-            ws_manager.delete_connection(ws)
-
-
-class _AlreadyHandledResponse(Response):
-    # XXX: Eventlet API should not be used directly.
-    # https://github.com/benoitc/gunicorn/pull/2581
-    from packaging import version
-    import eventlet
-
-    if version.parse(eventlet.__version__) >= version.parse("0.30.3"):
-        import eventlet.wsgi
-
-        _ALREADY_HANDLED = getattr(eventlet.wsgi, "ALREADY_HANDLED", None)
-    else:
-        from eventlet.wsgi import ALREADY_HANDLED  # pylint: disable=no-name-in-module
-
-        _ALREADY_HANDLED = ALREADY_HANDLED
-
-    def __call__(self, environ, start_response):
-        return self._ALREADY_HANDLED
-
-
-def websocket(name, path):
-    def _websocket(controller_func):
-        def __websocket(self, req, **_):
-            wrapper = WebSocketRegistrationWrapper(controller_func, self)
-            ws_wsgi = hub.WebSocketWSGI(wrapper)
-            ws_wsgi(req.environ, req.start_response)
-            # XXX: In order to prevent the writing to a already closed socket.
-            #      This issue is caused by combined use:
-            #       - webob.dec.wsgify()
-            #       - eventlet.wsgi.HttpProtocol.handle_one_response()
-            return _AlreadyHandledResponse()
-
-        __websocket.routing_info = {
-            "name": name,
-            "path": path,
-            "methods": None,
-            "requirements": None,
-        }
-        return __websocket
-
-    return _websocket
+# Note: the original ofctl_rest defined a ``@websocket`` decorator backed by
+# ``eventlet.wsgi`` (via ``hub.WebSocketWSGI`` and the
+# ``eventlet.wsgi.ALREADY_HANDLED`` sentinel). It had no callers in this tree
+# and its sentinel-based plumbing only made sense under eventlet, so it was
+# removed when faucet dropped eventlet. If WebSocket support comes back, use
+# a stdlib- or asyncio-based implementation rather than re-introducing the
+# eventlet primitives.
 
 
 class ControllerBase:
@@ -321,9 +272,38 @@ class WSGIApplication:
         return self._wsmanager
 
 
-class WSGIServer(hub.WSGIServer):
+class WSGIServer:
+    """Stdlib-backed wrapper that mimics the API faucet expects.
+
+    Replaces the previous ``hub.WSGIServer`` (which only existed on os-ken's
+    eventlet hub). Picks ``AF_INET6`` automatically when ``host`` is an
+    IPv6 address (the integration tests use ``::1``); otherwise the default
+    ``AF_INET`` is fine.
+    """
+
     def __init__(self, application, host, port, **config):
-        super().__init__((host, port), application, **config)
+        # pylint: disable=import-outside-toplevel
+        import socket
+        from wsgiref.simple_server import (
+            WSGIRequestHandler,
+            WSGIServer as _WSGIServer,
+        )
+
+        del config  # unused; was forwarded to eventlet.wsgi
+
+        server_class = _WSGIServer
+        if ":" in host:
+
+            class _IPv6WSGIServer(_WSGIServer):
+                address_family = socket.AF_INET6
+
+            server_class = _IPv6WSGIServer
+
+        self._server = server_class((host, port), WSGIRequestHandler)
+        self._server.set_app(application)
 
     def __call__(self):
         self.serve_forever()
+
+    def serve_forever(self):
+        self._server.serve_forever()

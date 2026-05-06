@@ -1908,7 +1908,15 @@ class TfmValve(Valve):
 class OVSValve(Valve):
     """Valve implementation for OVS."""
 
-    USE_BARRIERS = False
+    # Userspace OVS processes message kinds in parallel without an
+    # explicit barrier, so a FLOW_MOD that references a meter installed
+    # earlier in the same reload can land before the meter is committed
+    # and trip ``OFPMMFC_INVALID_METER``. Under eventlet's cooperative
+    # scheduling there was enough natural delay between batches to hide
+    # this; under the native (threading) hub it surfaces deterministically
+    # in FaucetUntaggedMeterModTest. Insert barriers between message
+    # kinds so OVS finishes one before processing the next.
+    USE_BARRIERS = True
 
 
 class OVSTfmValve(TfmValve):
@@ -1916,7 +1924,7 @@ class OVSTfmValve(TfmValve):
 
     # TODO: use OXMIDs acceptable to OVS.
     # TODO: dynamically determine tables/flows
-    USE_BARRIERS = False
+    USE_BARRIERS = True
     USE_OXM_IDS = False
     MAX_TABLE_ID = 253
     MIN_MAX_FLOWS = 1000000

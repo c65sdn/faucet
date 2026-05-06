@@ -1,7 +1,6 @@
-c65beka==1.0.2
-c65chewie==1.0.5
+c65beka==1.0.3
+c65chewie==1.0.6
 https://github.com/faucetsdn/python3-fakencclient/archive/main.tar.gz#egg=ncclient
-eventlet>=0.34.3; python_version >= "3.12"
 networkx>=3.6.1
 pbr>=1.9
 prometheus_client==0.25.0

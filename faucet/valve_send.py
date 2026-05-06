@@ -28,6 +28,11 @@ from os_ken.ofproto import ofproto_v1_3_parser as parser
 BARRIER_TIMEOUT = 5.0
 
 
+def _ends_with_barrier(batch):
+    """True iff ``batch`` is non-empty and ends with an OFPBarrierRequest."""
+    return bool(batch) and isinstance(batch[-1], parser.OFPBarrierRequest)
+
+
 class BarrierAwareSender:
     """Per-datapath worker that pushes prepared message batches in order
     and waits for OFPBarrierReply before continuing past each barrier."""
@@ -44,7 +49,8 @@ class BarrierAwareSender:
         self.valves_manager = valves_manager
         self.logger = logger
         self.barrier_timeout = barrier_timeout
-        self._queue: "queue.Queue[list]" = queue.Queue()
+        # Items are either (batch, on_complete) tuples or _stop_sentinel.
+        self._queue: "queue.Queue" = queue.Queue()
         self._stop_sentinel = object()
         self._stopped = threading.Event()
         self._thread = threading.Thread(
@@ -54,12 +60,22 @@ class BarrierAwareSender:
         )
         self._thread.start()
 
-    def submit(self, ofmsgs):
-        """Enqueue an already-prepared (reordered) ofmsg batch."""
+    def submit(self, ofmsgs, on_complete=None):
+        """Enqueue an already-prepared (reordered) ofmsg batch.
+
+        ``on_complete`` (if given) is invoked from the worker thread once
+        the batch has fully drained -- including the OFPBarrierReply for
+        the final barrier. If the batch as submitted has no trailing
+        barrier, the worker appends one before invoking the callback so
+        completion truly means the switch has acked the last message.
+        The callback is *not* invoked if the channel is torn down
+        mid-batch (sender exits and reconnect re-pushes config).
+        """
         if self._stopped.is_set():
             return
-        if ofmsgs:
-            self._queue.put(list(ofmsgs))
+        if not ofmsgs and on_complete is None:
+            return
+        self._queue.put((list(ofmsgs), on_complete))
 
     def stop(self):
         """Signal the worker to drain and exit. Idempotent."""
@@ -71,11 +87,22 @@ class BarrierAwareSender:
     def _run(self):
         try:
             while True:
-                batch = self._queue.get()
-                if batch is self._stop_sentinel:
+                item = self._queue.get()
+                if item is self._stop_sentinel:
                     return
+                batch, on_complete = item
+                if on_complete is not None and not _ends_with_barrier(batch):
+                    batch.append(parser.OFPBarrierRequest(None))
                 if not self._send_batch(batch):
                     return
+                if on_complete is not None:
+                    try:
+                        on_complete()
+                    except Exception:  # pylint: disable=broad-except
+                        self.logger.exception(
+                            "on_complete callback for %016x raised",
+                            self.dp_id,
+                        )
         except Exception:  # pylint: disable=broad-except
             self.logger.exception("sender thread for %016x crashed", self.dp_id)
 

@@ -19,6 +19,7 @@
 
 import threading
 from collections import defaultdict
+from functools import partial
 
 from faucet.conf import InvalidConfigError
 from faucet.config_parser_util import config_changed, CONFIG_HASH_FUNC
@@ -121,6 +122,10 @@ class ValvesManager:
         # send and stopped when the datapath disconnects.
         self._senders_lock = threading.Lock()
         self._senders = {}
+        # _mark_dp_config_applied runs on the sender thread but mutates
+        # the same dict touched by reset/datapath_connect on the event
+        # loop, so guard the read-modify-set with a lock.
+        self._config_applied_lock = threading.Lock()
 
     def update_dp_live_time(self, now):
         """
@@ -311,15 +316,18 @@ class ValvesManager:
         if new_dps is None:
             return False
         deleted_dpids = set(self.valves) - {dp.dp_id for dp in new_dps}
-        sent = {}
         for new_dp in new_dps:
             dp_id = new_dp.dp_id
             if dp_id in self.valves:
                 self.logger.info("Reconfiguring existing datapath %s", dpid_log(dp_id))
                 valve = self.valves[dp_id]
                 ofmsgs = valve.reload_config(now, new_dp, list(self.valves.values()))
-                self.send_flows_to_dp_by_id(valve, ofmsgs)
-                sent[dp_id] = valve.dp.dyn_running
+                # Mark config_applied[dp_id] only after the per-DP sender
+                # has drained (final barrier acked). For offline DPs the
+                # send path bails out so the callback never fires and the
+                # flag stays False -- matching the prior dyn_running gate.
+                on_complete = partial(self._mark_dp_config_applied, dp_id)
+                self.send_flows_to_dp_by_id(valve, ofmsgs, on_complete=on_complete)
             else:
                 self.logger.info("Add new datapath %s", dpid_log(new_dp.dp_id))
                 valve = self.new_valve(new_dp)
@@ -334,8 +342,21 @@ class ValvesManager:
                 del self.valves[deleted_dp]
         self.bgp.reset(self.valves)
         self.dot1x.reset(self.valves)
-        self.update_config_applied(sent)
+        # Recompute the fraction now that self.valves has settled. Any
+        # on_complete that fired during the loop saw a partial valve
+        # set; a final pass over the full set yields the right
+        # denominator (and accounts for new/offline DPs whose callback
+        # never runs).
+        self.update_config_applied()
         return True
+
+    def _mark_dp_config_applied(self, dp_id):
+        """Record that ``dp_id`` has acked its config-apply batch.
+
+        Invoked from the per-DP sender thread once the trailing barrier
+        has been acknowledged.
+        """
+        self.update_config_applied({dp_id: True})
 
     def load_configs(self, now, new_config_file, delete_dp=None):
         """Load/apply new config to all Valves."""
@@ -450,17 +471,25 @@ class ValvesManager:
             valve.update_metrics(now, pkt_meta.port, rate_limited=True)
 
     def update_config_applied(self, sent=None, reset=False):
-        """Update faucet_config_applied from {dpid: sent} dict,
-        defining applied == sent == enqueued via Ryu"""
-        if reset:
-            self.config_applied = defaultdict(bool)
-        if sent:
-            self.config_applied.update(sent)
-        count = float(len(self.valves))
-        configured = sum(
-            (1 if self.config_applied[dp_id] else 0) for dp_id in self.valves
-        )
-        fraction = configured / count if count > 0 else 0
+        """Update faucet_config_applied from {dpid: applied} dict.
+
+        ``applied == True`` means the DP has acked its config-apply
+        batch (including the trailing barrier the per-DP sender appends
+        when needed). The metric is the fraction of DPs that have
+        acked, so the test fixture can use ``faucet_config_applied=1``
+        as a real synchronisation point rather than a "messages
+        enqueued" signal.
+        """
+        with self._config_applied_lock:
+            if reset:
+                self.config_applied = defaultdict(bool)
+            if sent:
+                self.config_applied.update(sent)
+            count = float(len(self.valves))
+            configured = sum(
+                (1 if self.config_applied[dp_id] else 0) for dp_id in self.valves
+            )
+            fraction = configured / count if count > 0 else 0
         self.metrics.faucet_config_applied.set(fraction)
 
     def datapath_connect(self, now, valve, discovered_up_ports):
@@ -507,14 +536,18 @@ class ValvesManager:
         for event in waiters.values():
             event.set()
 
-    def submit_to_sender(self, valve, ryu_dp, ofmsgs):
+    def submit_to_sender(self, valve, ryu_dp, ofmsgs, on_complete=None):
         """Hand a prepared ofmsg batch to the per-DP sender thread.
 
         Lazily creates the sender on first use. Subsequent calls reuse
         it; on reconnect the dp_id remains the same so the existing
         thread keeps draining.
+
+        ``on_complete``, if given, runs on the sender thread after the
+        batch has been acked by the switch (the sender appends a final
+        barrier when needed so completion really means committed).
         """
-        if not ofmsgs:
+        if not ofmsgs and on_complete is None:
             return
         dp_id = ryu_dp.id
         with self._senders_lock:
@@ -526,7 +559,7 @@ class ValvesManager:
                     sender.stop()
                 sender = BarrierAwareSender(ryu_dp, self, valve.logger.logger)
                 self._senders[dp_id] = sender
-        sender.submit(ofmsgs)
+        sender.submit(ofmsgs, on_complete=on_complete)
 
     def stop_sender(self, dp_id):
         """Stop the sender for a datapath that has disconnected and

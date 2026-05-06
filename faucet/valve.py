@@ -1835,7 +1835,7 @@ class Valve:
         self.recent_ofmsgs.extend(reordered_flow_msgs)
         return reordered_flow_msgs
 
-    def send_flows(self, ryu_dp, flow_msgs, now, valves_manager=None):
+    def send_flows(self, ryu_dp, flow_msgs, now, valves_manager=None, on_complete=None):
         """Send flows to datapath (or disconnect an OF session).
 
         Args:
@@ -1846,6 +1846,9 @@ class Valve:
                 the barrier-aware sender thread for this datapath.
                 Otherwise falls back to inline send (used by tests that
                 drive prepare_send_flows directly).
+            on_complete: callable invoked from the sender thread after
+                the batch's trailing barrier has been acked. Only
+                meaningful when ``valves_manager`` is provided.
         """
         if flow_msgs is None:
             self.datapath_disconnect(now)
@@ -1855,7 +1858,9 @@ class Valve:
             return
         prepared = self.prepare_send_flows(flow_msgs)
         if valves_manager is not None:
-            valves_manager.submit_to_sender(self, ryu_dp, prepared)
+            valves_manager.submit_to_sender(
+                self, ryu_dp, prepared, on_complete=on_complete
+            )
             return
         for flow_msg in prepared:
             flow_msg.datapath = ryu_dp

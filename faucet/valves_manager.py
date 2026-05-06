@@ -17,12 +17,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import threading
 from collections import defaultdict
 
 from faucet.conf import InvalidConfigError
 from faucet.config_parser_util import config_changed, CONFIG_HASH_FUNC
 from faucet.config_parser import dp_parser, dp_preparsed_parser
 from faucet.valve import valve_factory, SUPPORTED_HARDWARE
+from faucet.valve_send import BarrierAwareSender
 from faucet.valve_util import dpid_log, stat_config_files
 
 
@@ -109,6 +111,16 @@ class ValvesManager:
         self.config_applied = {}
         self.config_watcher = ConfigWatcher()
         self.meta_dp_state = MetaDPState()
+        # Per-DP barrier waiters keyed by (dp_id, xid). Populated by the
+        # send pipeline before send_msg returns and consumed by the
+        # OFPBarrierReply handler. The outer lock guards both lookup
+        # and mutation; the inner Events do their own signalling.
+        self._barrier_lock = threading.Lock()
+        self._barrier_waiters = defaultdict(dict)
+        # Per-DP sender threads, keyed by dp_id. Lazily created on first
+        # send and stopped when the datapath disconnects.
+        self._senders_lock = threading.Lock()
+        self._senders = {}
 
     def update_dp_live_time(self, now):
         """
@@ -456,3 +468,71 @@ class ValvesManager:
         self.meta_dp_state.dp_last_live_time[valve.dp.name] = now
         self.update_config_applied({valve.dp.dp_id: True})
         return valve.datapath_connect(now, discovered_up_ports)
+
+    def register_barrier(self, dp_id, xid):
+        """Register a waiter for an outstanding barrier.
+
+        Must be called by the send path *before* send_msg returns so a
+        fast OFPBarrierReply can find the Event in the dict.
+        """
+        event = threading.Event()
+        with self._barrier_lock:
+            self._barrier_waiters[dp_id][xid] = event
+        return event
+
+    def complete_barrier(self, dp_id, xid):
+        """Signal the waiter for ``(dp_id, xid)``. No-op if absent.
+
+        Called from the OFPBarrierReply handler. Must not block.
+        """
+        with self._barrier_lock:
+            event = self._barrier_waiters.get(dp_id, {}).pop(xid, None)
+        if event is not None:
+            event.set()
+
+    def discard_barrier(self, dp_id, xid):
+        """Drop a waiter without signalling. Used by the send path to
+        clean up after a hit/miss/cancel."""
+        with self._barrier_lock:
+            self._barrier_waiters.get(dp_id, {}).pop(xid, None)
+
+    def cancel_barriers(self, dp_id):
+        """Release all waiters for a datapath (channel went away).
+
+        Workers blocked in Event.wait will return and unwind their
+        batch instead of sleeping out the timeout.
+        """
+        with self._barrier_lock:
+            waiters = self._barrier_waiters.pop(dp_id, {})
+        for event in waiters.values():
+            event.set()
+
+    def submit_to_sender(self, valve, ryu_dp, ofmsgs):
+        """Hand a prepared ofmsg batch to the per-DP sender thread.
+
+        Lazily creates the sender on first use. Subsequent calls reuse
+        it; on reconnect the dp_id remains the same so the existing
+        thread keeps draining.
+        """
+        if not ofmsgs:
+            return
+        dp_id = ryu_dp.id
+        with self._senders_lock:
+            sender = self._senders.get(dp_id)
+            if sender is None or sender.ryu_dp is not ryu_dp:
+                # New datapath object (e.g. reconnect): drop any stale
+                # sender and start a fresh one bound to the new ryu_dp.
+                if sender is not None:
+                    sender.stop()
+                sender = BarrierAwareSender(ryu_dp, self, valve.logger.logger)
+                self._senders[dp_id] = sender
+        sender.submit(ofmsgs)
+
+    def stop_sender(self, dp_id):
+        """Stop the sender for a datapath that has disconnected and
+        wake any waiters parked on its barriers."""
+        self.cancel_barriers(dp_id)
+        with self._senders_lock:
+            sender = self._senders.pop(dp_id, None)
+        if sender is not None:
+            sender.stop()

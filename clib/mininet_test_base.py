@@ -861,7 +861,10 @@ class FaucetTestBase(unittest.TestCase):
             params = {}
         try:
             ofctl_result = requests.get(req, params=params).json()
-        except requests.exceptions.ConnectionError:
+        except (requests.exceptions.ConnectionError, ValueError):
+            # ValueError covers JSONDecodeError when the REST endpoint
+            # is up but answers with an empty/non-JSON body (e.g. during
+            # osken-manager startup). _ofctl_get retries on None.
             return None
         return ofctl_result
 

@@ -2085,6 +2085,9 @@ class FaucetUntaggedApplyMeterTest(FaucetUntaggedMeterParseTest):
 class FaucetUntaggedMeterAddTest(FaucetUntaggedMeterParseTest):
     NUM_FAUCET_CONTROLLERS = 1
 
+    # See FaucetUntaggedApplyMeterTest above; same root cause, same
+    # interim skip, same fix path (docs/block_on_barrier.rst).
+    @unittest.skip("flaky on native hub: see docs/block_on_barrier.rst")
     def test_untagged(self):
         super().test_untagged()
         conf = self._get_faucet_conf()

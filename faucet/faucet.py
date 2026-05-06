@@ -215,7 +215,9 @@ class Faucet(OSKenAppBase):
         if not ryu_dp:
             valve.logger.error("send_flow_msgs: DP not up")
             return
-        valve.send_flows(ryu_dp, flow_msgs, time.time())
+        valve.send_flows(
+            ryu_dp, flow_msgs, time.time(), valves_manager=self.valves_manager
+        )
 
     def _get_valve(self, ryu_event, require_running=False):
         """Get Valve instance to response to an event.
@@ -300,6 +302,24 @@ class Faucet(OSKenAppBase):
         valve.oferror(msg)
 
     @set_ev_cls(
+        ofp_event.EventOFPBarrierReply,  # pylint: disable=no-member
+        MAIN_DISPATCHER,
+    )
+    @kill_on_exception(exc_logname)
+    def barrier_reply_handler(self, ryu_event):
+        """Wake the sender thread blocked on this barrier's xid.
+
+        Kept deliberately tiny: this runs on the os-ken event-loop
+        thread and any blocking work here would deadlock the loop
+        against its own send pipeline.
+        """
+        msg = ryu_event.msg
+        ryu_dp = msg.datapath
+        if ryu_dp is None:
+            return
+        self.valves_manager.complete_barrier(ryu_dp.id, msg.xid)
+
+    @set_ev_cls(
         ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER  # pylint: disable=no-member
     )
     @kill_on_exception(exc_logname)
@@ -345,7 +365,9 @@ class Faucet(OSKenAppBase):
         Args:
             ryu_event (ryu.controller.ofp_event.Event)
         """
-        valve, _, _ = self._get_valve(ryu_event)
+        valve, ryu_dp, _ = self._get_valve(ryu_event)
+        if ryu_dp is not None:
+            self.valves_manager.stop_sender(ryu_dp.id)
         if valve is None:
             return
         valve.datapath_disconnect(time.time())

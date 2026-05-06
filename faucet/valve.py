@@ -1835,24 +1835,31 @@ class Valve:
         self.recent_ofmsgs.extend(reordered_flow_msgs)
         return reordered_flow_msgs
 
-    def send_flows(self, ryu_dp, flow_msgs, now):
+    def send_flows(self, ryu_dp, flow_msgs, now, valves_manager=None):
         """Send flows to datapath (or disconnect an OF session).
 
         Args:
             ryu_dp (ryu.controller.controller.Datapath): datapath.
             flow_msgs (list): OpenFlow messages to send.
+            now (float): current epoch time.
+            valves_manager (ValvesManager): if provided, dispatches via
+                the barrier-aware sender thread for this datapath.
+                Otherwise falls back to inline send (used by tests that
+                drive prepare_send_flows directly).
         """
-
-        def ryu_send_flows(local_flow_msgs):
-            for flow_msg in self.prepare_send_flows(local_flow_msgs):
-                flow_msg.datapath = ryu_dp
-                ryu_dp.send_msg(flow_msg)
-
         if flow_msgs is None:
             self.datapath_disconnect(now)
+            if valves_manager is not None:
+                valves_manager.stop_sender(ryu_dp.id)
             ryu_dp.close()
-        else:
-            ryu_send_flows(flow_msgs)
+            return
+        prepared = self.prepare_send_flows(flow_msgs)
+        if valves_manager is not None:
+            valves_manager.submit_to_sender(self, ryu_dp, prepared)
+            return
+        for flow_msg in prepared:
+            flow_msg.datapath = ryu_dp
+            ryu_dp.send_msg(flow_msg)
 
     def flow_timeout(self, now, table_id, match):
         """Call flow timeout message handler:

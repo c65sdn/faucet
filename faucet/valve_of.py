@@ -736,9 +736,12 @@ def packetout(port_num, data):
     return packetouts([port_num], data)
 
 
-@functools.lru_cache()
 def barrier():
     """Return OpenFlow barrier request.
+
+    Each call constructs a fresh request: block-on-barrier mutates the
+    instance (xid, datapath) per send, so the cached singleton would be
+    corrupted by overlapping reloads on different datapaths.
 
     Returns:
         ryu.ofproto.ofproto_v1_3_parser.OFPBarrierRequest: barrier request.

@@ -769,9 +769,7 @@ socket_timeout=15
             return False
         try:
             listening_pids = self.cmd(
-                mininet_test_util.tcp_listening_pids_cmd(
-                    port, state=state, pid=ryu_pid
-                )
+                mininet_test_util.tcp_listening_pids_cmd(port, state=state, pid=ryu_pid)
             ).split()
         except AttributeError:
             return False

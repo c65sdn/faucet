@@ -84,8 +84,7 @@ def tcp_listening_pids_cmd(port, state="LISTEN", pid=None):
     ``mininet.Host.cmd``)."""
     state_arg = _SS_STATE_MAP.get(state.upper(), state.lower())
     cmd = (
-        "ss -Htnp state %s '( sport = :%u )' "
-        "| grep -oE 'pid=[0-9]+' | cut -d= -f2"
+        "ss -Htnp state %s '( sport = :%u )' " "| grep -oE 'pid=[0-9]+' | cut -d= -f2"
     ) % (state_arg, port)
     if pid is not None:
         # ``grep -wF`` matches the literal pid as a whole word, avoiding

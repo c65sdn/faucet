@@ -66,6 +66,34 @@ def udp_listening_cmd(port, terse=True):
     return lsof_udp_listening_cmd(port, terse)
 
 
+# Map of TCP states accepted by lsof (-sTCP:STATE) to the names ``ss`` uses
+# when filtering with ``state ...``.
+_SS_STATE_MAP = {
+    "LISTEN": "listening",
+    "ESTABLISHED": "established",
+}
+
+
+def tcp_listening_pids_cmd(port, state="LISTEN", pid=None):
+    """Return a shell command that prints PIDs of processes with TCP sockets
+    in the given state on `port` (covering both IPv4 and IPv6 in one call).
+
+    ``ss`` is ~10-100x faster than ``lsof`` and this helper is invoked from
+    tight polling loops in the controller liveness checks. The returned
+    string contains a pipeline so it must be executed via a shell (e.g.
+    ``mininet.Host.cmd``)."""
+    state_arg = _SS_STATE_MAP.get(state.upper(), state.lower())
+    cmd = (
+        "ss -Htnp state %s '( sport = :%u )' "
+        "| grep -oE 'pid=[0-9]+' | cut -d= -f2"
+    ) % (state_arg, port)
+    if pid is not None:
+        # ``grep -wF`` matches the literal pid as a whole word, avoiding
+        # false matches against pids that share a numeric prefix.
+        cmd += " | grep -wF %u" % pid
+    return cmd
+
+
 def mininet_dpid(int_dpid):
     """Return stringified hex version, of int DPID for mininet."""
     return str("%x" % int(int_dpid))

@@ -1,5 +1,5 @@
 c65beka==1.0.4
-c65chewie==1.0.6
+c65chewie==1.0.7
 https://github.com/faucetsdn/python3-fakencclient/archive/main.tar.gz#egg=ncclient
 networkx>=3.6.1
 pbr>=7.0.3

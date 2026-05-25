@@ -1608,7 +1608,16 @@ dbs:
             for port in ports_not_updated:
                 first = first_counters[port]
                 now = now_counters[port]
-                not_updated = [var for var, val in now.items() if val <= first[var]]
+                # first_counters is scraped tolerantly (assert_present=False), so a
+                # baseline var may still be None if the gauge watcher hadn't exported
+                # it before the wait loop above timed out. Treat a missing baseline as
+                # "not updated" so we keep polling and eventually return False (a clean
+                # caller-side failure) rather than raising TypeError on None <= int.
+                not_updated = [
+                    var
+                    for var, val in now.items()
+                    if first[var] is None or val <= first[var]
+                ]
                 if not_updated:
                     break
                 updated_ports.add(port)

@@ -582,8 +582,11 @@ class FakeOFTable:
         if next_table:
             pending_actions = []
         if pending_actions:
-            raise FakeOFTableException("flow performs actions on packet after \
-                                       output with no goto: %s" % matching_fte)
+            raise FakeOFTableException(
+                "flow performs actions on packet after \
+                                       output with no goto: %s"
+                % matching_fte
+            )
         return outputs, packet_dict, next_table
 
     def get_output(self, match, trace=False):
@@ -1175,7 +1178,9 @@ def parse_print_args():
         usage="""
     Print a flow table in a human readable format
     {argv0} print -f FILE
-""".format(argv0=sys.argv[0]),
+""".format(
+            argv0=sys.argv[0]
+        ),
     )
     arg_parser.add_argument(
         "-f",
@@ -1194,7 +1199,9 @@ def parse_probe_args():
         usage="""
     Find the flow table entries in a given flow table that match a given packet
     {argv0} probe -f FILE -p PACKET_STRING
-""".format(argv0=sys.argv[0]),
+""".format(
+            argv0=sys.argv[0]
+        ),
     )
     arg_parser.add_argument(
         "-p",
@@ -1229,7 +1236,9 @@ def parse_args():
         usage="""
     {argv0} <command> <args>
 
-""".format(argv0=sys.argv[0]),
+""".format(
+            argv0=sys.argv[0]
+        ),
     )
     arg_parser.add_argument("command", help='Subcommand, either "print" or "probe"')
     args = arg_parser.parse_args(sys.argv[1:2])

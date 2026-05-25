@@ -30,9 +30,12 @@ class ValveTestEgressPipeline(
 ):  # pylint: disable=too-few-public-methods
     """Run complete set of basic tests."""
 
-    DP1_CONFIG = """
+    DP1_CONFIG = (
+        """
             egress_pipeline: True
-    """ + DP1_CONFIG
+    """
+        + DP1_CONFIG
+    )
 
 
 class ValveEgressACLTestCase(ValveTestBases.ValveTestNetwork):

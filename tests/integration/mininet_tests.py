@@ -669,10 +669,12 @@ listen {
         with open(
             "%s/freeradius/clients.conf" % self.tmpdir, "w", encoding="utf-8"
         ) as clients:
-            clients.write("""client localhost {
+            clients.write(
+                """client localhost {
     ipaddr = 127.0.0.1
     secret = SECRET
-}""")
+}"""
+            )
 
         with open(
             "%s/freeradius/sites-enabled/inner-tunnel" % self.tmpdir,
@@ -684,7 +686,9 @@ listen {
        ipaddr = 127.0.0.1
        port = %d
        type = auth
-}""" % (self.RADIUS_PORT + 2)
+}""" % (
+                self.RADIUS_PORT + 2
+            )
             tunnel_config = re.sub(listen_match, listen_config, tunnel_config)
             innertunnel_site.seek(0)
             innertunnel_site.write(tunnel_config)
@@ -1687,9 +1691,12 @@ vlans:
 
 
 class FaucetUntaggedNoCombinatorialFloodTest(FaucetUntaggedTest):
-    CONFIG = """
+    CONFIG = (
+        """
         combinatorial_port_flood: False
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
 
 class FaucetUntaggedControllerNfvTest(FaucetUntaggedTest):
@@ -1723,7 +1730,8 @@ class FaucetUntaggedBroadcastTest(FaucetUntaggedTest):
 
 
 class FaucetUntaggedNSLoopTest(FaucetUntaggedTest):
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 acls:
     nsonly:
         - rule:
@@ -1738,7 +1746,9 @@ acls:
 vlans:
     100:
         description: "untagged"
-""" % IPV6_ETH
+"""
+        % IPV6_ETH
+    )
 
     CONFIG = """
         interfaces:
@@ -1761,9 +1771,12 @@ vlans:
 
 
 class FaucetUntaggedNoCombinatorialBroadcastTest(FaucetUntaggedBroadcastTest):
-    CONFIG = """
+    CONFIG = (
+        """
         combinatorial_port_flood: False
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
 
 class FaucetUntaggedLogRotateTest(FaucetUntaggedTest):
@@ -2950,14 +2963,17 @@ vlans:
         description: "untagged"
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         timeout: 25
         arp_neighbor_timeout: 12
         nd_neighbor_timeout: 12
         ignore_learn_ins: 0
         learn_jitter: 0
         cache_update_guard_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def hosts_learned(self, hosts):
         """Check that hosts are learned by FAUCET on the expected ports."""
@@ -3054,7 +3070,8 @@ class FaucetSingleHostsNoIdleTimeoutPrometheusTest(
 ):
     """Test broken reset idle timer on flow refresh workaround."""
 
-    CONFIG = """
+    CONFIG = (
+        """
         timeout: 15
         arp_neighbor_timeout: 4
         nd_neighbor_timeout: 4
@@ -3062,7 +3079,9 @@ class FaucetSingleHostsNoIdleTimeoutPrometheusTest(
         learn_jitter: 0
         cache_update_guard_time: 1
         idle_dst: False
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
 
 class FaucetSingleL3LearnMACsOnPortTest(FaucetUntaggedTest):
@@ -3080,7 +3099,9 @@ vlans:
         description: "untagged"
         max_hosts: %u
         faucet_vips: ["10.0.254.254/16"]
-""" % (_max_hosts() + 4)
+""" % (
+        _max_hosts() + 4
+    )
 
     CONFIG = (
         """
@@ -3090,7 +3111,8 @@ vlans:
             eth_src: %u
             eth_dst: %u
             ipv4_fib: %u
-""" % (_max_hosts() + 64, _max_hosts() + 64, _max_hosts() + 64)
+"""
+        % (_max_hosts() + 64, _max_hosts() + 64, _max_hosts() + 64)
         + """
         interfaces:
             %(port_1)d:
@@ -3130,7 +3152,9 @@ vlans:
     100:
         description: "untagged"
         max_hosts: %u
-""" % (_max_hosts() + 4)
+""" % (
+        _max_hosts() + 4
+    )
 
     CONFIG = (
         """
@@ -3139,7 +3163,8 @@ vlans:
         table_sizes:
             eth_src: %u
             eth_dst: %u
-""" % (_max_hosts() + 64, _max_hosts() + 64)
+"""
+        % (_max_hosts() + 64, _max_hosts() + 64)
         + """
         interfaces:
             %(port_1)d:
@@ -3928,13 +3953,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         arp_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_peer_conf = """
     static {
@@ -4001,13 +4030,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         arp_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_peer_conf = """
     static {
@@ -4078,13 +4111,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         arp_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_peer_conf = """
     static {
@@ -4170,13 +4207,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         arp_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_log = None
     exabgp_err = None
@@ -4672,7 +4713,9 @@ details partner lacp pdu:
     port priority: 2
     port number: %d
     port state: 62
-""".strip() % tuple(get_lacp_port_id(self.port_map["port_%u" % i]) for i in lag_ports)
+""".strip() % tuple(
+            get_lacp_port_id(self.port_map["port_%u" % i]) for i in lag_ports
+        )
 
         lacp_timeout = 5
 
@@ -4833,9 +4876,12 @@ vlans:
         faucet_vips: ["10.0.0.254/24"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_ping_fragment_controller(self):
         first_host = self.hosts_name_ordered()[0]
@@ -4887,9 +4933,12 @@ vlans:
         faucet_vips: ["10.0.0.254/24"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_fping_controller(self):
         first_host = self.hosts_name_ordered()[0]
@@ -4903,17 +4952,23 @@ vlans:
 class FaucetUntaggedIPv6RATest(FaucetUntaggedTest):
     FAUCET_MAC = "0e:00:00:00:00:99"
 
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 vlans:
     100:
         description: "untagged"
         faucet_vips: ["fe80::1:254/64", "fc00::1:254/112", "fc00::2:254/112", "10.0.0.254/24"]
         faucet_mac: "%s"
-""" % FAUCET_MAC
+"""
+        % FAUCET_MAC
+    )
 
-    CONFIG = """
+    CONFIG = (
+        """
         advertise_interval: 5
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_ndisc6(self):
         first_host = self.hosts_name_ordered()[0]
@@ -5003,9 +5058,12 @@ vlans:
         faucet_vips: ["fc00::1:254/112"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_flap_ping_controller(self):
         first_host, second_host = self.hosts_name_ordered()[0:2]
@@ -5071,9 +5129,12 @@ vlans:
         faucet_vips: ["fc00::1:254/112"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_fping_controller(self):
         first_host = self.hosts_name_ordered()[0]
@@ -5270,9 +5331,12 @@ acls:
             actions:
                 allow: 1
 """
-    CONFIG = """
+    CONFIG = (
+        """
         dp_acls: [1]
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_port5001_blocked(self):
         self.ping_all_when_learned()
@@ -7231,9 +7295,12 @@ vlans:
         faucet_vips: ["10.0.0.254/24"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_ping_controller(self):
         first_host, second_host = self.hosts_name_ordered()[0:2]
@@ -7250,9 +7317,12 @@ vlans:
         faucet_vips: ["fc00::1:254/112"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         max_resolve_backoff_time: 1
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_ping_controller(self):
         first_host, second_host = self.hosts_name_ordered()[0:2]
@@ -7464,11 +7534,14 @@ vlans:
         faucet_vips: ["10.0.0.254/24"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
         proactive_learn_v4: True
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_tagged(self):
         host_pair = self.hosts_name_ordered()[:2]
@@ -7493,11 +7566,14 @@ vlans:
         faucet_vips: ["fc00::1:3/64"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
         proactive_learn_v6: True
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_tagged(self):
         host_pair = self.hosts_name_ordered()[:2]
@@ -7532,7 +7608,8 @@ vlans:
     200:
         faucet_vips: ["10.200.0.254/24"]
         faucet_mac: "%s"
-""" % FAUCET_MAC2
+"""
+        % FAUCET_MAC2
         + """
 routers:
     global:
@@ -7548,7 +7625,8 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
     CONFIG = """
@@ -7610,7 +7688,8 @@ routers:
 class FaucetUntaggedIPv4InterVLANRouteTest(FaucetUntaggedTest):
     FAUCET_MAC2 = "0e:00:00:00:00:02"
 
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 vlans:
     100:
         faucet_vips: ["10.100.0.254/24", "169.254.1.1/24"]
@@ -7621,7 +7700,9 @@ vlans:
 routers:
     router-1:
         vlans: [100, vlanb]
-""" % FAUCET_MAC2
+"""
+        % FAUCET_MAC2
+    )
 
     CONFIG = """
         arp_neighbor_timeout: 2
@@ -7666,7 +7747,8 @@ routers:
 class FaucetUntaggedPortSwapIPv4InterVLANRouteTest(FaucetUntaggedTest):
     FAUCET_MAC2 = "0e:00:00:00:00:02"
 
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 vlans:
     vlana:
         vid: 100
@@ -7678,7 +7760,9 @@ vlans:
 routers:
     router-1:
         vlans: [vlana, vlanb]
-""" % FAUCET_MAC2
+"""
+        % FAUCET_MAC2
+    )
 
     CONFIG = """
         arp_neighbor_timeout: 2
@@ -7731,7 +7815,8 @@ routers:
 class FaucetUntaggedExpireIPv4InterVLANRouteTest(FaucetUntaggedTest):
     FAUCET_MAC2 = "0e:00:00:00:00:02"
 
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 vlans:
     100:
         faucet_vips: ["10.100.0.254/24"]
@@ -7742,7 +7827,9 @@ vlans:
 routers:
     router-1:
         vlans: [100, vlanb]
-""" % FAUCET_MAC2
+"""
+        % FAUCET_MAC2
+    )
 
     CONFIG = """
         arp_neighbor_timeout: 2
@@ -7784,7 +7871,8 @@ routers:
 class FaucetUntaggedIPv6InterVLANRouteTest(FaucetUntaggedTest):
     FAUCET_MAC2 = "0e:00:00:00:00:02"
 
-    CONFIG_GLOBAL = """
+    CONFIG_GLOBAL = (
+        """
 vlans:
     100:
         faucet_vips: ["fc00::1:254/112", "fe80::1:254/112"]
@@ -7795,7 +7883,9 @@ vlans:
 routers:
     router-1:
         vlans: [100, vlanb]
-""" % FAUCET_MAC2
+"""
+        % FAUCET_MAC2
+    )
 
     CONFIG = """
         nd_neighbor_timeout: 2
@@ -8027,10 +8117,13 @@ vlans:
         faucet_vips: ["172.16.0.254/24", "10.0.0.254/24"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         arp_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_untagged(self):
         host_pair = self.hosts_name_ordered()[:2]
@@ -8054,10 +8147,13 @@ vlans:
         faucet_vips: ["fc00::1:254/112", "fc01::1:254/112"]
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_untagged(self):
         host_pair = self.hosts_name_ordered()[:2]
@@ -8096,13 +8192,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_peer_conf = """
     static {
@@ -8164,13 +8264,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_peer_conf = """
     static {
@@ -8224,10 +8328,13 @@ vlans:
                 ip_gw: "fc00::20:2"
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_untagged(self):
         first_host, second_host = self.hosts_name_ordered()[:2]
@@ -8279,13 +8386,17 @@ routers:
 """
         + """
             neighbor_as: %u
-""" % PEER_BGP_AS
+"""
+        % PEER_BGP_AS
     )
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     exabgp_log = None
     exabgp_err = None
@@ -8357,10 +8468,13 @@ vlans:
                 ip_gw: "fc00::1:2"
 """
 
-    CONFIG = """
+    CONFIG = (
+        """
         nd_neighbor_timeout: 2
         max_resolve_backoff_time: 1
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_tagged(self):
         """Test IPv6 routing works."""
@@ -8385,9 +8499,12 @@ vlans:
 
 
 class FaucetGroupTableTest(FaucetUntaggedTest):
-    CONFIG = """
+    CONFIG = (
+        """
         group_table: True
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def test_group_exist(self):
         self.assertEqual(
@@ -8400,9 +8517,12 @@ class FaucetGroupTableTest(FaucetUntaggedTest):
 
 
 class FaucetTaggedGroupTableTest(FaucetTaggedTest):
-    CONFIG = """
+    CONFIG = (
+        """
         group_table: True
-""" + CONFIG_TAGGED_BOILER
+"""
+        + CONFIG_TAGGED_BOILER
+    )
 
     def test_group_exist(self):
         self.assertEqual(
@@ -9361,10 +9481,13 @@ vlans:
     100:
         description: "untagged"
 """
-    CONFIG = """
+    CONFIG = (
+        """
         timeout: 1
         use_idle_timeout: True
-""" + CONFIG_BOILER_UNTAGGED
+"""
+        + CONFIG_BOILER_UNTAGGED
+    )
 
     def wait_for_host_removed(self, host, in_port, timeout=5):
         for _ in range(timeout):
@@ -9584,9 +9707,12 @@ class FaucetUntaggedMorePortsBase(FaucetUntaggedTest):
     EVENT_LOGGER_TIMEOUT = 180  # Timeout for event logger process
 
     # Config lines for additional ports
-    CONFIG_EXTRA_PORT = """
+    CONFIG_EXTRA_PORT = (
+        """
             {port}:
-                native_vlan: 100""" + "\n"
+                native_vlan: 100"""
+        + "\n"
+    )
 
     def pre_start_net(self):
         """Extend config with more ports if needed"""

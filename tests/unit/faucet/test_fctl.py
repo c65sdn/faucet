@@ -111,7 +111,9 @@ class FctlTestCase(FctlTestCaseBase):
         """Test can filter by display labels."""
         expected_output = """
 learned_macs\t[('dp_id', '{dp_id}')]\t{mac_addr}
-""".format(**self.DEFAULT_VALUES).strip()
+""".format(
+            **self.DEFAULT_VALUES
+        ).strip()
 
         self.run_fctl(
             self.learned_macs_prom(),

@@ -3,7 +3,7 @@ bitstring
 codecov
 concurrencytest
 debian-inspector
-exabgp==5.0.10
+exabgp==5.0.12
 importlab>=0.8.1
 netifaces
 packaging

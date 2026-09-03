@@ -1965,6 +1965,22 @@ dbs:
             self.env[self.faucet_controllers[0].name]["FAUCET_EXCEPTION_LOG"]
         )
 
+    @staticmethod
+    def prometheus_samples(prom_out, var):
+        """(sample, value) for each sample of regex ``var``, less its _created sibling.
+
+        prometheus_client emits a ``_created`` series per counter holding a unix
+        timestamp, so a regex that merely looks for a digit beside the name
+        matches whatever the counter's own value is.
+        """
+        return [
+            (sample, float(value))
+            for sample, value in re.findall(
+                r"^(%s\S*)\s+(\S+)$" % var, prom_out, re.MULTILINE
+            )
+            if "_created" not in sample
+        ]
+
     def prometheus_smoke_test(self):
         prom_out = "\n".join(self.scrape_prometheus())
         for nonzero_var in (
@@ -1974,14 +1990,22 @@ dbs:
             r"faucet_config\S+name=\"flood\"",
             r"faucet_pbr_version\S+version=",
         ):
+            samples = self.prometheus_samples(prom_out, nonzero_var)
             self.assertTrue(
-                re.search(r"%s\S+\s+[1-9]+" % nonzero_var, prom_out),
-                msg="expected %s to be nonzero (%s)" % (nonzero_var, prom_out),
+                samples, msg="no sample for %s (%s)" % (nonzero_var, prom_out)
+            )
+            self.assertTrue(
+                any(value for _, value in samples),
+                msg="expected %s to be nonzero, got %s (%s)"
+                % (nonzero_var, samples, prom_out),
             )
         for zero_var in ("of_errors", "of_dp_disconnections"):
-            self.assertTrue(
-                re.search(r"%s\S+\s+0" % zero_var, prom_out),
-                msg="expected %s to be present and zero (%s)" % (zero_var, prom_out),
+            samples = self.prometheus_samples(prom_out, zero_var)
+            self.assertTrue(samples, msg="no sample for %s (%s)" % (zero_var, prom_out))
+            self.assertFalse(
+                [sample for sample in samples if sample[1]],
+                msg="expected %s to be zero, got %s (%s)"
+                % (zero_var, samples, prom_out),
             )
 
     def get_configure_count(self, retries=5, controller=None):

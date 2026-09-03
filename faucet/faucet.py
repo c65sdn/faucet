@@ -300,7 +300,8 @@ class Faucet(OSKenAppBase):
         self.valves_manager.valve_packet_in(ryu_event.timestamp, valve, msg)
 
     @set_ev_cls(
-        ofp_event.EventOFPErrorMsg, MAIN_DISPATCHER  # pylint: disable=no-member
+        ofp_event.EventOFPErrorMsg,  # pylint: disable=no-member
+        [CONFIG_DISPATCHER, MAIN_DISPATCHER],
     )
     @kill_on_exception(exc_logname)
     def error_handler(self, ryu_event):
@@ -316,7 +317,7 @@ class Faucet(OSKenAppBase):
 
     @set_ev_cls(
         ofp_event.EventOFPBarrierReply,  # pylint: disable=no-member
-        MAIN_DISPATCHER,
+        [CONFIG_DISPATCHER, MAIN_DISPATCHER],
     )
     @kill_on_exception(exc_logname)
     def barrier_reply_handler(self, ryu_event):
@@ -386,7 +387,8 @@ class Faucet(OSKenAppBase):
         valve.datapath_disconnect(time.time())
 
     @set_ev_cls(
-        ofp_event.EventOFPDescStatsReply, MAIN_DISPATCHER  # pylint: disable=no-member
+        ofp_event.EventOFPDescStatsReply,  # pylint: disable=no-member
+        [CONFIG_DISPATCHER, MAIN_DISPATCHER],
     )
     @kill_on_exception(exc_logname)
     def desc_stats_reply_handler(self, ryu_event):

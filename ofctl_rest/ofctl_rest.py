@@ -28,8 +28,8 @@ from c65of import dpset
 from c65of.app import MAIN_DISPATCHER
 from c65of.app import set_ev_cls
 from c65of import ofproto as ofproto_v1_3
-from c65of import ofctl as ofctl_v1_3
 from c65of import hub
+import ofctl as ofctl_v1_3
 from wsgi import ControllerBase
 from wsgi import Response
 from wsgi import WSGIApplication, WSGIServer

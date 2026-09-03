@@ -8,7 +8,6 @@ importlab>=0.8.1
 netifaces
 packaging
 psutil==7.2.2
-requests
 requirements-parser
 scapy==2.7.0
 routes

@@ -2315,6 +2315,10 @@ dbs:
                 )
             )
         for host in self.hosts_name_ordered():
+            # An IPv6 send from a still tentative address fails outright, and
+            # a packet never sent cannot be looped back to us: wait, so this
+            # verifies flooding rather than trivially passing.
+            self.wait_host_ipv6_ready(host)
             for bcast_cmd in (
                 ("ndisc6 -w1 fe80::1 %s" % host.defaultIntf()),
                 ("ping -b -i0.1 -c3 %s" % self.ipv4_vip_bcast()),
@@ -3226,6 +3230,74 @@ dbs:
         self.flush_arp_cache(host)
         self.one_ipv4_ping(host, self.FAUCET_VIPV4.ip)
         self.verify_ipv4_host_learned_mac(host, self.FAUCET_VIPV4.ip, self.FAUCET_MAC)
+
+    @staticmethod
+    def host_ipv6_ready(host, intf):
+        """Return usable (DAD complete) IPv6 link local addresses on host intf."""
+        return host.cmd(
+            "ip -6 -o addr show dev %s scope link -tentative -dadfailed" % intf
+        ).strip()
+
+    def wait_host_ipv6_ready(self, host, intf=None, timeout=15):
+        """Wait for host intf to have a usable IPv6 link local address.
+
+        A newly created veth has no IPv6 address until its peer brings the
+        link up, and the link local address the kernel then generates stays
+        tentative until duplicate address detection completes (up to ~2s).
+        The kernel refuses to send from a tentative address, so anything
+        sending IPv6 in that window fails with EADDRNOTAVAIL.
+        """
+        if intf is None:
+            intf = host.defaultIntf()
+        for _ in range(timeout * 10):
+            if self.host_ipv6_ready(host, intf):
+                return
+            time.sleep(0.1)
+        self.fail(
+            "%s: no usable IPv6 address on %s after %us (disable_ipv6=%s): %s"
+            % (
+                host.name,
+                intf,
+                timeout,
+                host.cmd("cat /proc/sys/net/ipv6/conf/%s/disable_ipv6" % intf).strip(),
+                host.cmd("ip -6 addr show dev %s" % intf).strip(),
+            )
+        )
+
+    def _run_ipv6_discovery(self, host, args, intf):
+        """Run an ndisc6 suite tool on host, failing with the reason if it errors.
+
+        The tools report errors (e.g. EADDRNOTAVAIL) on stderr and exit
+        non-zero, so returning stdout alone turns any failure to send into an
+        unrelated looking comparison against the expected answer.
+        """
+        if intf is None:
+            intf = host.defaultIntf()
+        self.wait_host_ipv6_ready(host, intf)
+        cmd = list(args) + [str(intf)]
+        stdout, stderr, exitcode = host.pexec(*cmd)
+        self.assertEqual(
+            0,
+            exitcode,
+            msg="%s on %s failed (%d): %s (%s)"
+            % (
+                " ".join(cmd),
+                host.name,
+                exitcode,
+                stderr.strip(),
+                host.cmd("ip -6 addr show dev %s" % intf).strip(),
+            ),
+        )
+        return stdout
+
+    def ndisc6(self, host, addr, intf=None):
+        """Return the MAC ndisc6 resolves addr to, from host."""
+        return self._run_ipv6_discovery(host, ("ndisc6", "-q", str(addr)), intf).strip()
+
+    def rdisc6(self, host, intf=None):
+        """Return the prefixes rdisc6 discovers from host, deduplicated."""
+        stdout = self._run_ipv6_discovery(host, ("rdisc6", "-q"), intf)
+        return sorted({line.strip() for line in stdout.splitlines() if line.strip()})
 
     def one_ipv6_ping(
         self,

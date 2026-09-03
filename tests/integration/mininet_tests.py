@@ -4973,25 +4973,11 @@ vlans:
     def test_ndisc6(self):
         first_host = self.hosts_name_ordered()[0]
         for vip in ("fe80::1:254", "fc00::1:254", "fc00::2:254"):
-            self.assertEqual(
-                self.FAUCET_MAC.upper(),
-                first_host.cmd(
-                    "ndisc6 -q %s %s" % (vip, first_host.defaultIntf())
-                ).strip(),
-            )
+            self.assertEqual(self.FAUCET_MAC.upper(), self.ndisc6(first_host, vip))
 
     def test_rdisc6(self):
         first_host = self.hosts_name_ordered()[0]
-        rdisc6_results = sorted(
-            list(
-                set(
-                    first_host.cmd(
-                        "rdisc6 -q %s" % first_host.defaultIntf()
-                    ).splitlines()
-                )
-            )
-        )
-        self.assertEqual(["fc00::1:0/112", "fc00::2:0/112"], rdisc6_results)
+        self.assertEqual(["fc00::1:0/112", "fc00::2:0/112"], self.rdisc6(first_host))
 
     def test_ra_advertise(self):
         first_host = self.hosts_name_ordered()[0]

@@ -713,6 +713,10 @@ socket_timeout=15
                 "2>/dev/null",
             )
         )
+        if os.path.exists(self.ofcap):
+            # Left by a previous start; otherwise the wait below returns
+            # immediately whether or not the new tcpdump ever ran.
+            os.remove(self.ofcap)
         self.cmd("timeout %s tcpdump %s &" % (self.MAX_CTL_TIME, tcpdump_args))
         for _ in range(50):
             if os.path.exists(self.ofcap):
@@ -755,11 +759,20 @@ socket_timeout=15
         return faucet_cli
 
     def ryu_pid(self):
-        """Return PID of ryu-manager process."""
+        """Return PID of the controller process, or None if it has not published one.
+
+        The pid file is written by the controller itself, so a read can race the
+        write and see an empty or half written file, and a file left by a previous
+        start holds a pid that has since died. Both parse as a pid that owns no
+        sockets, so only cache a value that is a live process."""
         if self.cached_ryu_pid is None:
-            if os.path.exists(self.pid_file) and os.path.getsize(self.pid_file) > 0:
+            try:
                 with open(self.pid_file, encoding="utf-8") as pid_file:
-                    self.cached_ryu_pid = int(pid_file.read())
+                    pid = int(pid_file.read())
+                os.kill(pid, 0)
+            except (OSError, ValueError):
+                return None
+            self.cached_ryu_pid = pid
         return self.cached_ryu_pid
 
     def listen_port(self, port, state="LISTEN"):
@@ -786,9 +799,37 @@ socket_timeout=15
         """Return True if controller listening on required ports."""
         return self.listen_port(self.port)
 
+    def node_alive(self):
+        """Return True if the Mininet node can still run commands.
+
+        Mininet.stop() terminates the node and closes its shell; from then on
+        Node.cmd() silently returns None, so every check that shells out is
+        false by construction and no amount of waiting will change that."""
+        return bool(self.shell)
+
     def connected(self):
         """Return True if at least one switch connected and controller healthy."""
-        return self.listen_port(self.port, state="ESTABLISHED") and self.healthy()
+        return self.not_connected_txt() is None
+
+    def not_connected_txt(self):
+        """Return None if a switch is connected and the controller is healthy,
+        else why not."""
+        if not self.node_alive():
+            return "%s: mininet node is gone, it cannot be restarted" % self.name
+        if not os.path.exists(self.logname()) or not os.path.getsize(self.logname()):
+            return "%s: no output yet in %s" % (self.name, self.logname())
+        ryu_pid = self.ryu_pid()
+        if ryu_pid is None:
+            return "%s: no live pid in %s" % (self.name, self.pid_file)
+        if not self.listening():
+            return "%s: pid %u not listening on its ports" % (self.name, ryu_pid)
+        if not self.listen_port(self.port, state="ESTABLISHED"):
+            return "%s: no switch connected to pid %u port %u" % (
+                self.name,
+                ryu_pid,
+                self.port,
+            )
+        return None
 
     def logname(self):
         """Return log file for controller."""
@@ -806,12 +847,13 @@ socket_timeout=15
 
     def start(self):
         """Start tcpdump for OF port and then start controller."""
-        # Each restart spawns a fresh Faucet process with a new pid; drop
-        # any cached value so ryu_pid() re-reads the new pid file. Without
-        # this, the test framework's _start_faucet retry loop polls lsof
-        # against the dead pid from attempt 1 and all subsequent attempts
-        # are guaranteed to time out with "not all controllers connected".
+        # A start spawns a fresh Faucet process with a new pid. Drop the cached
+        # value and the file the previous process wrote, so that ryu_pid() can
+        # only return a pid this start published: every socket check filters on
+        # it, so a dead pid makes them all false for as long as we care to wait.
         self.cached_ryu_pid = None
+        if os.path.exists(self.pid_file):
+            os.remove(self.pid_file)
         self._start_tcpdump()
         super().start()
         # ``net.start()`` will start the OVS switches the moment we
@@ -823,6 +865,8 @@ socket_timeout=15
         # is up so the next switch.start() lands a clean SYN.
         deadline = time.time() + 30
         while time.time() < deadline:
+            if not self.node_alive():
+                break
             if self.listening():
                 return
             time.sleep(0.1)
@@ -838,13 +882,12 @@ socket_timeout=15
 
     def stop(self):  # pylint: disable=arguments-differ
         """Stop controller."""
-        try:
-            if self.CPROFILE:
-                os.kill(self.ryu_pid(), 2)
-            else:
-                os.kill(self.ryu_pid(), 15)
-        except ProcessLookupError:
-            pass
+        ryu_pid = self.ryu_pid()
+        if ryu_pid is not None:
+            try:
+                os.kill(ryu_pid, 2 if self.CPROFILE else 15)
+            except ProcessLookupError:
+                pass
         self._stop_cap()
         super().stop()
         if os.path.exists(self.logname()):

@@ -725,8 +725,9 @@ class FaucetTestBase(unittest.TestCase):
         return None
 
     def _start_check(self):
-        if not self._wait_controllers_connected():
-            return "not all controllers connected to switch"
+        not_connected_txt = self._wait_controllers_connected()
+        if not_connected_txt is not None:
+            return "not all controllers connected to switch: %s" % not_connected_txt
         if not self._wait_ofctl_up():
             return "ofctl not up"
         if not self.wait_dp_status(1):
@@ -775,6 +776,26 @@ class FaucetTestBase(unittest.TestCase):
         self.env[gauge_controller.name] = self.env.pop(name)
         return gauge_controller
 
+    def _create_controllers(self, controller_intf, controller_ipv6):
+        """Build a fresh set of Faucet/Gauge controller nodes for a start attempt."""
+        for controller in self.faucet_controllers + self.gauge_controllers:
+            # _create_*_controller() moves the environment from the bare
+            # controller name to the pid qualified one; move it back so that
+            # the constructors find it again.
+            self.env[controller.name_no_pid] = self.env.pop(controller.name)
+        for log in glob.glob(os.path.join(self.tmpdir, "*.log")):
+            os.remove(log)
+        self.faucet_controllers = [
+            self._create_faucet_controller(c_index, controller_intf, controller_ipv6)
+            for c_index in range(self.NUM_FAUCET_CONTROLLERS)
+        ]
+        self.gauge_controllers = [
+            self._create_gauge_controller(c_index, controller_intf, controller_ipv6)
+            for c_index in range(self.NUM_GAUGE_CONTROLLERS)
+        ]
+        # Use the first Gauge instance for Prometheus scraping
+        self.gauge_controller = self.gauge_controllers[0]
+
     def _start_faucet(self, controller_intf, controller_ipv6):
         self.assertIsNone(self.net, "Cannot invoke _start_faucet() multiple times")
         self.assertTrue(
@@ -783,9 +804,6 @@ class FaucetTestBase(unittest.TestCase):
         self.assertTrue(
             self.NUM_GAUGE_CONTROLLERS > 0, "Define at least 1 Gauge controller"
         )
-
-        for log in glob.glob(os.path.join(self.tmpdir, "*.log")):
-            os.remove(log)
 
         # Setup all static configuration
         self._allocate_config_ports()
@@ -797,28 +815,16 @@ class FaucetTestBase(unittest.TestCase):
         self._init_faucet_config()
         self._init_gauge_config()
 
-        # Create all the controller instances
-        self.faucet_controllers = []
-        for c_index in range(self.NUM_FAUCET_CONTROLLERS):
-            controller = self._create_faucet_controller(
-                c_index, controller_intf, controller_ipv6
-            )
-            self.faucet_controllers.append(controller)
-
-        self.gauge_controllers = []
-        for c_index in range(self.NUM_GAUGE_CONTROLLERS):
-            controller = self._create_gauge_controller(
-                c_index, controller_intf, controller_ipv6
-            )
-            self.gauge_controllers.append(controller)
-
-        # Use the first Gauge instance for Prometheus scraping
-        self.gauge_controller = self.gauge_controllers[0]
-
-        self._wait_load()
-
         last_error_txt = None
         for _ in range(3):
+            # Mininet nodes are single use: _stop_net() terminates them and
+            # closes their shells, after which Node.cmd() silently returns None
+            # and Node.start() is a no-op. Reusing them would make every retry
+            # after the first fail by construction.
+            self._create_controllers(controller_intf, controller_ipv6)
+
+            self._wait_load()
+
             # Start Mininet, connected to the first controller
             self.net = Mininet(
                 self.topo, link=FaucetLink, controller=self.faucet_controllers[0]
@@ -841,7 +847,7 @@ class FaucetTestBase(unittest.TestCase):
             if last_error_txt is None:
                 break
 
-            # Existing controllers will be reused on the next cycle
+            # Fresh controllers are built at the top of the next cycle
             self._stop_net()
             last_error_txt += "\n\n" + self._dump_controller_logs()
             error("%s: %s" % (self._test_name(), last_error_txt))
@@ -979,11 +985,13 @@ class FaucetTestBase(unittest.TestCase):
                 return False
         return True
 
-    def _controllers_connected(self):
+    def _controllers_not_connected_txt(self):
+        """Return None if every controller has a switch connected, else why not."""
         for controller in self.net.controllers:
-            if not controller.connected():
-                return False
-        return True
+            not_connected_txt = controller.not_connected_txt()
+            if not_connected_txt is not None:
+                return not_connected_txt
+        return None
 
     def _wait_controllers_healthy(self, timeout=90):
         for _ in range(timeout * 4):
@@ -993,14 +1001,24 @@ class FaucetTestBase(unittest.TestCase):
         return False
 
     def _wait_controllers_connected(self, timeout=90):
-        # Slow CI runners can spend ~30s between Faucet startup and OVS
-        # establishing the OpenFlow channel; the previous 30s window
-        # turned that into a hard flake.
+        """Return None once every controller has a switch connected, else why not.
+
+        Slow CI runners can spend ~30s between Faucet startup and OVS establishing
+        the OpenFlow channel, so waiting is right for a channel that has not come
+        up yet. A dead Mininet node is not a slow one though: nothing it is asked
+        can ever succeed, so report it at once instead of polling it for 90s."""
+        not_connected_txt = None
         for _ in range(timeout * 4):
-            if self._controllers_connected():
-                return True
+            not_connected_txt = self._controllers_not_connected_txt()
+            if not_connected_txt is None:
+                return None
+            if not self._controllers_alive():
+                break
             time.sleep(0.25)
-        return False
+        return not_connected_txt
+
+    def _controllers_alive(self):
+        return all(controller.node_alive() for controller in self.net.controllers)
 
     def _wait_debug_log(self):
         """Require all switches to have exchanged flows with controller."""

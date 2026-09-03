@@ -432,15 +432,31 @@ class FaucetTestBase(unittest.TestCase):
         os.mkdir(tmpdir)
         return tmpdir
 
-    def _wait_load(self, load_retries=10):
-        load = os.getloadavg()[0]
-        for _ in range(load_retries):
+    # getloadavg()[0] is a one minute exponentially weighted average, so it
+    # decays with a time constant of about 60s. A runner that begins a shard at
+    # load 8 against a threshold of 3 needs roughly a minute of quiet before
+    # the figure can fall that far, however idle the machine is right now.
+    # Anything less than the averaging window cannot outlast the setup
+    # transient, and every test in the shard fails before one of them has run.
+    MAX_LOAD_WAIT = 90
+
+    def _wait_load(self):
+        """Block until the load average drops below the threshold for testing."""
+        delay = 0.1
+        waited = 0.0
+        while True:
+            load = os.getloadavg()[0]
             if load < self.max_test_load:
                 return
-            output("load average too high %f, waiting" % load)
-            time.sleep(random.uniform(0.1, 1.0))
-            load = os.getloadavg()[0]
-        self.fail("load average %f consistently too high" % load)
+            if waited >= self.MAX_LOAD_WAIT:
+                self.fail(
+                    "load average %f consistently too high: waited %.0fs for it "
+                    "to fall below %f" % (load, waited, self.max_test_load)
+                )
+            output("load average too high %f, waiting %.1fs" % (load, delay))
+            time.sleep(delay)
+            waited += delay
+            delay = min(delay * 2, 10.0)
 
     def _allocate_config_ports(self):
         for port_name in self.config_ports:

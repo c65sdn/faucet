@@ -57,6 +57,18 @@ OFPT_MULTIPART_REQUEST = 18
 OFPT_MULTIPART_REPLY = 19
 OFPT_BARRIER_REQUEST = 20
 OFPT_BARRIER_REPLY = 21
+NAMES = {
+    OFPT_HELLO: "HELLO",
+    OFPT_ECHO_REQUEST: "ECHO_REQUEST",
+    OFPT_ECHO_REPLY: "ECHO_REPLY",
+    OFPT_FEATURES_REQUEST: "FEATURES_REQUEST",
+    OFPT_FEATURES_REPLY: "FEATURES_REPLY",
+    OFPT_FLOW_MOD: "FLOW_MOD",
+    OFPT_MULTIPART_REQUEST: "MULTIPART_REQUEST",
+    OFPT_MULTIPART_REPLY: "MULTIPART_REPLY",
+    OFPT_BARRIER_REQUEST: "BARRIER_REQUEST",
+    OFPT_BARRIER_REPLY: "BARRIER_REPLY",
+}
 OFPMP_DESC = 0
 OFPMP_PORT_DESC = 13
 # Every capability an Open vSwitch reports, so faucet takes the datapath.
@@ -100,10 +112,26 @@ def _port_body(port_no):
 class HandshakeTestCase(unittest.TestCase):  # pytype: disable=module-attr
     """Faucet accepts a switch connection and programs it."""
 
-    PORT = 16653
-    TIMEOUT = 30
+    TIMEOUT = 90
+    # A single read must not be able to consume the whole budget: on a loaded
+    # machine faucet can be slow to reach the flow mods, and one 90s blocking
+    # read would leave no time to receive them.
+    READ_TIMEOUT = 10
+
+    @staticmethod
+    def _free_port():
+        """A port free right now. Racy in principle, adequate in practice."""
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return sock.getsockname()[1]
 
     def setUp(self):
+        # Every listener gets its own port. FAUCET_PROMETHEUS_PORT in
+        # particular defaults to a fixed 9302, and faucet kills itself on an
+        # unhandled exception, so a second instance sharing it dies during
+        # startup with nothing on stdout to say why.
+        self.port = self._free_port()
+        self.prom_port = self._free_port()
         self.tmpdir = (
             tempfile.TemporaryDirectory()
         )  # pylint: disable=consider-using-with
@@ -119,6 +147,8 @@ class HandshakeTestCase(unittest.TestCase):  # pytype: disable=module-attr
             FAUCET_CONFIG=config_file,
             FAUCET_LOG=os.path.join(self.tmpdir.name, "faucet.log"),
             FAUCET_EXCEPTION_LOG=os.path.join(self.tmpdir.name, "faucet-exc.log"),
+            FAUCET_PROMETHEUS_PORT=str(self.prom_port),
+            FAUCET_EVENT_SOCK="",
             PYTHONPATH=os.pathsep.join((root, os.path.join(root, "clib"))),
             PYTHONUNBUFFERED="1",
         )
@@ -130,7 +160,7 @@ class HandshakeTestCase(unittest.TestCase):  # pytype: disable=module-attr
                 sys.executable,
                 "-m",
                 "faucet",
-                "--ryu-ofp-tcp-listen-port=%u" % self.PORT,
+                "--ryu-ofp-tcp-listen-port=%u" % self.port,
                 "--ryu-ofp-listen-host=127.0.0.1",
             ],
             cwd=root,
@@ -153,16 +183,21 @@ class HandshakeTestCase(unittest.TestCase):  # pytype: disable=module-attr
         while time.time() < deadline:
             self.assertIsNone(self.proc.poll(), self._output())
             try:
-                return socket.create_connection(("127.0.0.1", self.PORT), timeout=5)
+                return socket.create_connection(("127.0.0.1", self.port), timeout=5)
             except OSError:
                 time.sleep(0.1)
-        self.fail("faucet never listened on %u\n%s" % (self.PORT, self._output()))
+        self.fail("faucet never listened on %u\n%s" % (self.port, self._output()))
         return None
 
     def _output(self):
         self.output.flush()
         self.output.seek(0)
-        return self.output.read()
+        text = self.output.read()
+        exc_log = os.path.join(self.tmpdir.name, "faucet-exc.log")
+        if os.path.exists(exc_log) and os.path.getsize(exc_log):
+            with open(exc_log, encoding="utf-8") as handle:
+                text += "\nexception log:\n" + handle.read()
+        return text
 
     @staticmethod
     def _read_msg(sock):
@@ -205,26 +240,31 @@ class HandshakeTestCase(unittest.TestCase):  # pytype: disable=module-attr
     def test_switch_connects_and_is_programmed(self):
         """A switch completing the handshake gets its pipeline programmed."""
         sock = self._connect()
-        sock.settimeout(self.TIMEOUT)
+        sock.settimeout(self.READ_TIMEOUT)
         sock.sendall(_header(OFPT_HELLO, 8, 1))
         seen = []
         deadline = time.time() + self.TIMEOUT
         try:
             while time.time() < deadline and seen.count(OFPT_FLOW_MOD) < 5:
-                msg = self._read_msg(sock)
+                try:
+                    msg = self._read_msg(sock)
+                except socket.timeout:
+                    continue
                 if msg is None:
                     break
                 msg_type, xid, body = msg
                 seen.append(msg_type)
                 self._reply(sock, msg_type, xid, body)
-        except socket.timeout:  # pragma: no cover
-            pass
         finally:
             sock.close()
-        self.assertIn(OFPT_HELLO, seen, self._output())
-        self.assertIn(OFPT_FEATURES_REQUEST, seen, self._output())
-        self.assertIn(OFPT_MULTIPART_REQUEST, seen, self._output())
-        self.assertGreaterEqual(seen.count(OFPT_FLOW_MOD), 5, self._output())
+        detail = "saw %s\ncontroller output:\n%s" % (
+            [NAMES.get(t, t) for t in seen],
+            self._output(),
+        )
+        self.assertIn(OFPT_HELLO, seen, detail)
+        self.assertIn(OFPT_FEATURES_REQUEST, seen, detail)
+        self.assertIn(OFPT_MULTIPART_REQUEST, seen, detail)
+        self.assertGreaterEqual(seen.count(OFPT_FLOW_MOD), 5, detail)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,10 @@
 # pylint: disable=protected-access
 # pylint: disable=too-many-lines
 
+# c65of compiles its constructors from a declared wire layout, so pylint
+# cannot see the attributes an OpenFlow structure assigns.
+# pylint: disable=no-member
+
 from collections import namedtuple
 import random
 import re

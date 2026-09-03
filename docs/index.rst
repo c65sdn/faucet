@@ -27,6 +27,7 @@ Developer Documentation
    testing
    fuzzing
    block_on_barrier
+   drop_os_ken
    source/index
 
 Indices and tables

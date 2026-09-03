@@ -43,6 +43,7 @@ from c65of.ofctl import (
 )
 from c65of.ofproto import ether
 from c65of.ofproto import inet
+from c65of.ofproto import nx
 from c65of.ofproto import parser as ofproto_parser
 
 LOG = logging.getLogger("ofctl")
@@ -334,6 +335,41 @@ def to_match(dp, attrs):
 # -- rendering side ---------------------------------------------------------
 
 
+def _nicira_action_to_str(act):
+    """One Nicira extension action, as os-ken's ``ofctl_nicira_ext`` reports it."""
+    if act.subtype == nx.NXAST_CT:
+        zone = act.zone_src or ""
+        if act.zone_ofs_nbits:
+            zone += "[%s..%s]" % (act.zone_ofs_nbits, act.zone_ofs_nbits + 16)
+        return "NX_CT: {flags: %s, zone: %s, table: %s, alg: %s, actions: %s}" % (
+            act.flags,
+            zone,
+            act.recirc_table,
+            act.alg,
+            [action_to_str(nested) for nested in act.actions],
+        )
+    if act.subtype == nx.NXAST_NAT:
+        return (
+            "NX_NAT: {flags: %s, range_ipv4_min: %s, range_ipv4_max: %s, "
+            "range_ipv6_min: %s, range_ipv6_max: %s, range_proto_min: %s, "
+            "range_proto_max: %s}"
+            % (
+                act.flags,
+                act.range_ipv4_min,
+                act.range_ipv4_max,
+                act.range_ipv6_min,
+                act.range_ipv6_max,
+                act.range_proto_min,
+                act.range_proto_max,
+            )
+        )
+    data = getattr(act, "data", None) or b""
+    return "NX_UNKNOWN: {subtype: %s, data: %s}" % (
+        act.subtype,
+        base64.b64encode(data).decode("utf-8"),
+    )
+
+
 def action_to_str(act):
     """One action as the short string the REST API reports."""
     action_type = act.type
@@ -371,6 +407,13 @@ def action_to_str(act):
     if action_type == ofproto.OFPAT_POP_PBB:
         return "POP_PBB"
     if action_type == ofproto.OFPAT_EXPERIMENTER:
+        if act.experimenter == ofproto.NX_EXPERIMENTER_ID:
+            try:
+                return _nicira_action_to_str(act)
+            except Exception:  # pylint: disable=broad-except
+                LOG.debug(
+                    "Error parsing NX_ACTION(%s)", act.__class__.__name__, exc_info=True
+                )
         data = getattr(act, "data", b"") or b""
         data_str = base64.b64encode(data)
         return "EXPERIMENTER: {experimenter:%s, data:%s}" % (

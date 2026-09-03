@@ -66,6 +66,13 @@ LIBS = (
 )
 
 
+def _reparse(parser, action):
+    """An action as it comes back off the wire, which is how the REST API sees it."""
+    buf = bytearray()
+    action.serialize(buf, 0)
+    return parser.OFPAction.parser(bytes(buf), 0)
+
+
 class _StubReply:  # pylint: disable=too-few-public-methods
     """A stats reply: the rendering functions read only its body."""
 
@@ -706,6 +713,76 @@ class OfctlRestTestCase(unittest.TestCase):  # pytype: disable=module-attr
         )
         self.assertEqual(
             "GROUP:ALL", ofctl.action_to_str(c65_parser.OFPActionGroup(0xFFFFFFFC))
+        )
+
+    def test_nicira_action_to_str(self):
+        """Nicira extension actions render as os-ken's REST API renders them."""
+        builders = (
+            (
+                "NXActionCT",
+                {
+                    "flags": 0,
+                    "zone_src": None,
+                    "zone_ofs_nbits": 1,
+                    "recirc_table": 0,
+                    "alg": 0,
+                    "actions": [],
+                },
+            ),
+            (
+                "NXActionCT",
+                {
+                    "flags": 1,
+                    "zone_src": "reg0",
+                    "zone_ofs_nbits": 0,
+                    "recirc_table": 1,
+                    "alg": 0,
+                    "actions": [],
+                },
+            ),
+            (
+                "NXActionNAT",
+                {
+                    "flags": 1,
+                    "range_ipv4_min": "10.0.0.1",
+                    "range_ipv4_max": "10.0.0.2",
+                },
+            ),
+        )
+        for name, kwargs in builders:
+            ours = _reparse(c65_parser, getattr(c65_parser, name)(**kwargs))
+            theirs = _reparse(osken_parser, getattr(osken_parser, name)(**kwargs))
+            self.assertEqual(
+                osken_ofctl.action_to_str(theirs),
+                ofctl.action_to_str(ours),
+                name,
+            )
+
+    def test_nicira_ct_action_in_flow_stats(self):
+        """A CT action in a flow stats reply renders as NX_CT, not EXPERIMENTER.
+
+        The integration tests match conntrack flows on this exact string.
+        """
+        act = _reparse(
+            c65_parser,
+            c65_parser.NXActionCT(
+                flags=0,
+                zone_src=None,
+                zone_ofs_nbits=1,
+                recirc_table=0,
+                alg=0,
+                actions=[],
+            ),
+        )
+        self.assertEqual(
+            ["NX_CT: {flags: 0, zone: [1..17], table: 0, alg: 0, actions: []}"],
+            ofctl.actions_to_str(
+                [
+                    c65_parser.OFPInstructionActions(
+                        c65_ofproto.OFPIT_APPLY_ACTIONS, [act]
+                    )
+                ]
+            ),
         )
 
     def test_reserved_numbers_to_user(self):

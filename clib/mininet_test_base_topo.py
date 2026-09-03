@@ -379,7 +379,7 @@ class FaucetTopoTestBase(FaucetTestBase):
             host.cmd(
                 timeout_cmd(
                     "tcpdump -U -n -c 1 -i %s -w %s ether proto 0x88CC and not ether src %s &"
-                    % (host.defaultIntf(), host.MAC(), lldp_cap_file),
+                    % (host.defaultIntf(), lldp_cap_file, host.MAC()),
                     60,
                 )
             )
@@ -389,12 +389,16 @@ class FaucetTopoTestBase(FaucetTestBase):
         self.verify_empty_caps(lldp_cap_files)
         if verify_bridge_local_rule:
             # Verify 802.1x flood block triggered.
+            resend = self.ladvd_send_funcs(
+                "-L -o %s", self.hosts_name_ordered()[1:], repeats=1
+            )
             for dpid in self.dpids:
                 self.wait_nonzero_packet_count_flow(
                     {"dl_dst": "01:80:c2:00:00:00/ff:ff:ff:ff:ff:f0"},
                     dpid=dpid,
                     table_id=self._FLOOD_TABLE,
                     ofa_match=False,
+                    send_traffic=partial(self.run_send_funcs, resend),
                 )
         self.retry_net_ping(retries=retries)
 

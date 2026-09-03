@@ -1,6 +1,6 @@
 c65beka==1.0.4
 c65chewie==1.0.7
-c65of>=1.0.4
+c65of>=1.0.5
 https://github.com/faucetsdn/python3-fakencclient/archive/main.tar.gz#egg=ncclient
 netaddr>=1.3.0
 networkx>=3.6.1

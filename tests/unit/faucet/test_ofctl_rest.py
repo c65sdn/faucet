@@ -50,6 +50,8 @@ def _load_ofctl():
         "ofctl.py",
     )
     spec = importlib.util.spec_from_file_location("ofctl_rest_ofctl", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("cannot load %s" % path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

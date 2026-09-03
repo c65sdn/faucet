@@ -113,8 +113,8 @@ eyeballed.
 What the differential tests did not catch
 =========================================
 
-Three bugs survived 1,158 passing tests in c65of and were found by running
-faucet against it:
+Eight bugs survived c65of's own passing tests. Three were found by running
+faucet end to end:
 
 * The datapath was not named before its features reply reached observers.
   os-ken sets the id inside its own handler and gets away with it because it
@@ -128,10 +128,32 @@ faucet against it:
 * An application given as a file path would not load, which is how the
   integration tests start ``ofctl_rest``.
 
+Five more were found only by driving faucet against real Open vSwitch:
+
+* A switch could not connect at all. Open vSwitch opens with a hello
+  announcing OpenFlow 1.5 and expects to be negotiated down to 1.3; the
+  hello was rejected at the parser. Every test here sent a 1.3 hello, so
+  every test passed.
+* Message events carried no timestamp, so every packet-in raised
+  ``AttributeError`` inside the handler.
+* The controller started silently, and faucet judges a controller healthy
+  only once its log is non-empty -- so a working controller with a connected
+  switch and a programmed pipeline looked dead.
+* An address written with a prefix length lost its host bits, so the two
+  spellings of the same match disagreed with each other.
+* A malformed address raised ``OSError`` where config validation catches
+  ``ValueError``, crashing the parser instead of reporting the bad address.
+
 The lesson is not that differential testing was the wrong tool -- it is what
 made the 24,000 line port tractable -- but that it only ever compares one
 implementation against another on inputs someone thought to write down. It
-cannot see a race between two observers, or a launch path nothing exercises.
+cannot see a race between two observers, a launch path nothing exercises, or
+a switch that opens the conversation differently from the way the tests do.
+
+Two of those tests were worse than absent: they asserted the behaviour the
+implementation already had. The hello tests all sent version 1.3, and the
+prefix tests all used canonical networks. A test written to confirm an
+assumption cannot falsify it.
 
 Latent bugs this exposed in faucet
 ==================================

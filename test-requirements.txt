@@ -6,7 +6,7 @@ debian-inspector
 exabgp==5.0.12
 importlab>=0.8.1
 netifaces
-os_ken>=4.2.1
+os_ken>=4.2.2
 packaging
 psutil==7.2.2
 requests

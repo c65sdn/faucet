@@ -82,10 +82,10 @@ class OSKenAppBase(app.OFApp):
         if dead_threads:
             for thread in dead_threads:
                 thread_name = getattr(thread, "name", "unknown")
-                # Inconveniently, eventlet and friends helpfully put the last
-                # exception on stderr but not anywhere else where we can log it.
+                # A thread that dies of an unhandled exception leaves its
+                # traceback on stderr and nowhere we can log it.
                 self.logger.error(
-                    "unexpected %s thread termination - check Ryu/process stderr log",
+                    "unexpected %s thread termination - check the process stderr log",
                     thread_name,
                 )
             # If that succeeds (was a temporary error that killed the thread),

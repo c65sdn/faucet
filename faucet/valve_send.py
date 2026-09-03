@@ -6,14 +6,15 @@ switch before the OFPMeterMod that installs that meter has committed.
 ``valve_of.valve_flowreorder`` already interleaves OFPBarrierRequest
 markers between the message kinds when ``Valve.USE_BARRIERS`` is true,
 but submitting the barrier request alone does not block the controller:
-os-ken's ``send_msg`` returns as soon as the bytes hit ``send_q``, and
-the os-ken event loop dispatches further work for the same Ryu app on
-the same thread.
+``send_msg`` returns as soon as the bytes hit the datapath's send queue,
+and the application's dispatch thread carries straight on to the next
+event.
 
 This module owns one daemon thread per datapath. The Faucet event
 handler hands a prepared message list to ``BarrierAwareSender.submit``
 and returns immediately, so ``EventOFPBarrierReply`` can be dispatched
-while the worker is parked. The worker registers a waiter against the
+while the worker is parked. The dispatch thread must never be the one
+waiting: that is why the wait lives on this thread and not in a handler. The worker registers a waiter against the
 barrier xid in ``ValvesManager`` *before* sending, then blocks on the
 matching reply (with a timeout that drops the channel rather than
 hanging the controller).

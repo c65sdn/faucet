@@ -322,8 +322,8 @@ class Faucet(OSKenAppBase):
     def barrier_reply_handler(self, ryu_event):
         """Wake the sender thread blocked on this barrier's xid.
 
-        Kept deliberately tiny: this runs on the os-ken event-loop
-        thread and any blocking work here would deadlock the loop
+        Kept deliberately tiny: this runs on this application's dispatch
+        thread, and any blocking work here would deadlock that thread
         against its own send pipeline.
         """
         msg = ryu_event.msg

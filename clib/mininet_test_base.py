@@ -25,7 +25,7 @@ import unittest
 import netaddr
 import requests
 
-from os_ken.ofproto import ofproto_v1_3 as ofp
+from c65of import ofproto as ofp
 
 from mininet.link import Intf as HWIntf  # pylint: disable=import-error
 from mininet.log import error, output  # pylint: disable=import-error
@@ -866,8 +866,8 @@ class FaucetTestBase(unittest.TestCase):
             ofctl_result = requests.get(req, params=params).json()
         except (requests.exceptions.ConnectionError, ValueError):
             # ValueError covers JSONDecodeError when the REST endpoint
-            # is up but answers with an empty/non-JSON body (e.g. during
-            # osken-manager startup). _ofctl_get retries on None.
+            # is up but answers with an empty/non-JSON body (e.g. while
+            # the controller is still starting). _ofctl_get retries on None.
             return None
         return ofctl_result
 
@@ -1965,6 +1965,22 @@ dbs:
             self.env[self.faucet_controllers[0].name]["FAUCET_EXCEPTION_LOG"]
         )
 
+    @staticmethod
+    def prometheus_samples(prom_out, var):
+        """(sample, value) for each sample of regex ``var``, less its _created sibling.
+
+        prometheus_client emits a ``_created`` series per counter holding a unix
+        timestamp, so a regex that merely looks for a digit beside the name
+        matches whatever the counter's own value is.
+        """
+        return [
+            (sample, float(value))
+            for sample, value in re.findall(
+                r"^(%s\S*)\s+(\S+)$" % var, prom_out, re.MULTILINE
+            )
+            if "_created" not in sample
+        ]
+
     def prometheus_smoke_test(self):
         prom_out = "\n".join(self.scrape_prometheus())
         for nonzero_var in (
@@ -1974,14 +1990,22 @@ dbs:
             r"faucet_config\S+name=\"flood\"",
             r"faucet_pbr_version\S+version=",
         ):
+            samples = self.prometheus_samples(prom_out, nonzero_var)
             self.assertTrue(
-                re.search(r"%s\S+\s+[1-9]+" % nonzero_var, prom_out),
-                msg="expected %s to be nonzero (%s)" % (nonzero_var, prom_out),
+                samples, msg="no sample for %s (%s)" % (nonzero_var, prom_out)
+            )
+            self.assertTrue(
+                any(value for _, value in samples),
+                msg="expected %s to be nonzero, got %s (%s)"
+                % (nonzero_var, samples, prom_out),
             )
         for zero_var in ("of_errors", "of_dp_disconnections"):
-            self.assertTrue(
-                re.search(r"%s\S+\s+0" % zero_var, prom_out),
-                msg="expected %s to be present and zero (%s)" % (zero_var, prom_out),
+            samples = self.prometheus_samples(prom_out, zero_var)
+            self.assertTrue(samples, msg="no sample for %s (%s)" % (zero_var, prom_out))
+            self.assertFalse(
+                [sample for sample in samples if sample[1]],
+                msg="expected %s to be zero, got %s (%s)"
+                % (zero_var, samples, prom_out),
             )
 
     def get_configure_count(self, retries=5, controller=None):
@@ -2717,23 +2741,25 @@ dbs:
         ladvd_cmd = ";".join([ladvd_mkdir] + ladvd_all_args)
         return ladvd_cmd
 
+    def ladvd_send_funcs(self, send_cmd, hosts, timeout=3, repeats=3):
+        """Callables that each emit ladvd frames from one host."""
+        return [
+            partial(
+                host.cmd,
+                self.ladvd_cmd(
+                    send_cmd % host.defaultIntf(), repeats=repeats, timeout=timeout
+                ),
+            )
+            for host in hosts
+        ]
+
     def ladvd_noisemaker(
         self, send_cmd, tcpdump_filter, hosts=None, timeout=3, repeats=3
     ):
         if hosts is None:
             hosts = self.hosts_name_ordered()[:2]
         first_host = hosts[0]
-        other_hosts = hosts[1:]
-        other_host_cmds = []
-        for other_host in other_hosts:
-            other_host_cmds.append(
-                partial(
-                    other_host.cmd,
-                    self.ladvd_cmd(
-                        send_cmd % other_host.defaultIntf(), repeats=3, timeout=timeout
-                    ),
-                )
-            )
+        other_host_cmds = self.ladvd_send_funcs(send_cmd, hosts[1:], timeout=timeout)
         tcpdump_txt = self.tcpdump_helper(
             first_host,
             tcpdump_filter,
@@ -2747,18 +2773,30 @@ dbs:
         self.ladvd_noisemaker("-L -o %s", "ether proto 0x88cc", hosts, timeout=timeout)
 
     def verify_cdp_blocked(self, hosts=None, timeout=3):
+        if hosts is None:
+            hosts = self.hosts_name_ordered()[:2]
         self.ladvd_noisemaker(
             "-C -o %s",
             "ether dst host 01:00:0c:cc:cc:cc and ether[20:2]==0x2000",
             hosts,
             timeout=timeout,
         )
+        resend = self.ladvd_send_funcs(
+            "-C -o %s", hosts[1:], timeout=timeout, repeats=1
+        )
         self.wait_nonzero_packet_count_flow(
             {"dl_dst": "01:00:0c:cc:cc:cc"},
             self._FLOOD_TABLE,
             actions=[],
             ofa_match=False,
+            send_traffic=partial(self.run_send_funcs, resend),
         )
+
+    @staticmethod
+    def run_send_funcs(send_funcs):
+        """Run each traffic generator once."""
+        for send_func in send_funcs:
+            send_func()
 
     def verify_faucet_reconf(
         self,
@@ -3325,12 +3363,34 @@ dbs:
         self.wait_for_tcp_listen(host, port)
 
     def wait_nonzero_packet_count_flow(
-        self, match, table_id, timeout=15, actions=None, dpid=None, ofa_match=True
+        self,
+        match,
+        table_id,
+        timeout=15,
+        actions=None,
+        dpid=None,
+        ofa_match=True,
+        send_traffic=None,
     ):
-        """Wait for a flow to be present and have a non-zero packet_count."""
+        """Wait for a flow to be present and have a non-zero packet_count.
+
+        A counter read is not a synchronous observation of traffic sent earlier.
+        The frames may predate the flow's installation, in which case the table
+        miss dropped them while the DP was still being programmed; or a cold
+        start may have deleted and re-added the flow since, resetting its
+        counters. Either way the packets are gone and no amount of further
+        waiting brings them back.
+
+        Callers that can regenerate their traffic pass send_traffic, which runs
+        on every poll so each attempt is self contained rather than resting on a
+        burst emitted before the loop began.
+        """
         if dpid is None:
             dpid = self.dpid
+        flow = None
         for _ in range(timeout):
+            if send_traffic is not None:
+                send_traffic()
             flow = self.get_matching_flow_on_dpid(
                 dpid, match, table_id, timeout=1, actions=actions, ofa_match=ofa_match
             )
@@ -3361,7 +3421,12 @@ dbs:
         if mask is not None:
             match_port = "/".join((str(port), str(mask)))
         match["tp_dst"] = match_port
-        self.wait_nonzero_packet_count_flow(match, table_id, ofa_match=False)
+        self.wait_nonzero_packet_count_flow(
+            match,
+            table_id,
+            ofa_match=False,
+            send_traffic=partial(self.quiet_commands, first_host, (client_cmd,)),
+        )
         # cleanup listening nc (if any)
         second_host.cmd(client_cmd)
 

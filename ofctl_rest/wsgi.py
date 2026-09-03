@@ -21,7 +21,6 @@ import inspect
 
 from routes import Mapper
 from routes.util import URLGenerator
-import six
 from tinyrpc.server import RPCServer
 from tinyrpc.dispatch import RPCDispatcher
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
@@ -32,7 +31,7 @@ import webob.exc
 from webob.request import Request as webob_Request
 from webob.response import Response as webob_Response
 
-from os_ken.lib import hub
+from c65of import hub
 
 HEX_PATTERN = r"0x[0-9a-z]+"
 DIGIT_PATTERN = r"[1-9][0-9]*"
@@ -128,7 +127,7 @@ class WebSocketServerTransport(ServerTransport):
         return context, message
 
     def send_reply(self, context, reply):
-        self.ws.send(six.text_type(reply))
+        self.ws.send(str(reply))
 
 
 class WebSocketRPCServer(RPCServer):
@@ -157,7 +156,7 @@ class WebSocketClientTransport(ClientTransport):
         self.queue = queue
 
     def send_message(self, message, expect_reply=True):
-        self.ws.send(six.text_type(message))
+        self.ws.send(str(message))
 
         if expect_reply:
             return self.queue.get()

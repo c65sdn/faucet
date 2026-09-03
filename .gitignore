@@ -115,3 +115,6 @@ faucet.iml
 *.bak
 AUTHORS
 Changelog
+
+# Local agent session state
+.claude/

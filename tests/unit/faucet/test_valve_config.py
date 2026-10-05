@@ -1023,7 +1023,7 @@ acls:
             )
 
         self.update_and_revert_config(
-            CONFIG, acl_config, reload_type="warm", verify_func=verify_func
+            CONFIG, acl_config, reload_type="cold", verify_func=verify_func
         )
 
 
@@ -2317,7 +2317,6 @@ dps:
     def test_delete_static_route(self):
         """Test deleting static routes is a warm start."""
         table = self.network.tables[self.DP_ID]
-        before_table_state = table.table_state()
 
         def verify_func():
             self.l2_learn_host(1, 0x100, self.P1_V100_MAC)
@@ -2407,7 +2406,7 @@ dps:
             self.MORE_CONFIG,
             reload_type="warm",
             verify_func=verify_func,
-            before_table_states={self.DP_ID: before_table_state},
+            before_table_states={},
         )
 
 

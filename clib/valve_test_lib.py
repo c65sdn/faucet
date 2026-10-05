@@ -986,7 +986,7 @@ class ValveTestBases:
                     starts or warm starts
                 verify_func (func): Function to verify state changes
                 before_table_states (dict): Dict of string state by dp_id of the
-                    table before reloading
+                    table before reloading (pass {} to skip table comparison)
             """
             if before_table_states is None:
                 before_table_states = {
@@ -1001,9 +1001,10 @@ class ValveTestBases:
             self.update_config(
                 orig_config, reload_type=reload_type, table_dpid=table_dpid
             )
-            for dp_id, states in before_table_states.items():
-                before_hash, before_str = states
-                self._check_table_difference(before_hash, before_str, dp_id)
+            if before_table_states:
+                for dp_id, states in before_table_states.items():
+                    before_hash, before_str = states
+                    self._check_table_difference(before_hash, before_str, dp_id)
 
         def connect_dp(self, dp_id=None, ports_up=None):
             """

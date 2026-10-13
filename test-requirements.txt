@@ -9,7 +9,7 @@ netifaces
 packaging
 psutil==7.2.2
 requirements-parser
-scapy==2.7.0
+scapy==2.8.0
 routes
 webob
 tinyrpc<1.1.8

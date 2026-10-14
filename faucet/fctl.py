@@ -162,9 +162,7 @@ def parse_args(sys_args):
     Status of all DPs
 
     {argv0} -n --endpoints=http://172.17.0.1:9302 --metrics=dp_status
-""".format(
-            **{"argv0": sys.argv[0]}
-        ),
+""".format(**{"argv0": sys.argv[0]}),
     )
     arg_parser.add_argument(
         "-n", "--nonzero", action="store_true", help="nonzero results only"

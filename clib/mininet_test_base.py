@@ -30,7 +30,7 @@ from c65of import ofproto as ofp
 from mininet.link import Intf as HWIntf  # pylint: disable=import-error
 from mininet.log import error, output  # pylint: disable=import-error
 from mininet.net import Mininet
-from mininet.util import dumpNodeConnections, pmonitor  # pylint: disable=import-error
+from mininet.util import dumpNodeConnections  # pylint: disable=import-error
 
 from clib import mininet_test_util
 from clib import mininet_test_topo
@@ -3489,6 +3489,15 @@ dbs:
                 time.sleep(1)
         self.fail("%s never listened on port %u" % (host, port))
 
+    def wait_for_tcp_listen_or_none(self, host, port, timeout=10, ipv=4):
+        """Return True once the host is listening on the port, else False."""
+        for i in range(timeout):
+            if self.tcp_port_free(host, port, ipv) is not None:
+                return True
+            if i < (timeout - 1):
+                time.sleep(1)
+        return False
+
     def serve_str_on_tcp_port(self, host, port, serve_str="hello", timeout=20):
         """Serve str on a TCP port on a host."""
         host.cmd(
@@ -3903,7 +3912,12 @@ dbs:
         return -1
 
     def iperf(self, client_host, client_ip, server_host, server_ip, seconds):
-        def run_iperf(iperf_server_cmd, server_host, server_start_exp, port):
+        def run_iperf(iperf_server_cmd, server_host, port):
+            """Start the iperf server, run the client, stop the server.
+
+            Readiness is the bound listener socket, not the flushed
+            "Server listening" line, which needs unbuffered server stdio.
+            """
             server_out = server_host.popen(
                 iperf_server_cmd,
                 stdin=mininet_test_util.DEVNULL,
@@ -3911,19 +3925,18 @@ dbs:
                 close_fds=True,
             )
             popens = {server_host: server_out}
-            for host, line in pmonitor(popens):
-                if host != server_host:
-                    continue
-                if not re.search(server_start_exp, line):
-                    continue
-                self.wait_for_tcp_listen(server_host, port, ipv=server_ip.version)
-                iperf_mbps = self.iperf_client(client_host, iperf_client_cmd)
+            if not self.wait_for_tcp_listen_or_none(
+                server_host, port, ipv=server_ip.version
+            ):
                 self._signal_proc_on_port(server_host, port, 9)
-                return iperf_mbps
-            return None
+                return None, mininet_test_util.drain_popen(popens)
+            iperf_mbps = self.iperf_client(client_host, iperf_client_cmd)
+            self._signal_proc_on_port(server_host, port, 9)
+            return iperf_mbps, mininet_test_util.drain_popen(popens)
 
         timeout = (seconds * 3) + 5
         retries = 3
+        server_output = ""
         for i in range(retries):
             port = mininet_test_util.find_free_port(self.ports_sock, self._test_name())
             iperf_base_cmd = "iperf -f M -p %u" % port
@@ -3931,25 +3944,24 @@ dbs:
                 iperf_base_cmd += " -V"
             iperf_server_cmd = "%s -s -B %s" % (iperf_base_cmd, server_ip)
             iperf_server_cmd = mininet_test_util.timeout_cmd(iperf_server_cmd, timeout)
-            server_start_exp = r"Server listening on TCP port %u" % port
             iperf_client_cmd = mininet_test_util.timeout_cmd(
                 "%s -y c -c %s -B %s -t %u"
                 % (iperf_base_cmd, server_ip, client_ip, seconds),
                 timeout,
             )
-            iperf_mbps = run_iperf(
-                iperf_server_cmd, server_host, server_start_exp, port
-            )
+            iperf_mbps, server_output = run_iperf(iperf_server_cmd, server_host, port)
             if iperf_mbps is not None and iperf_mbps > 0:
                 return iperf_mbps
             if i < (retries - 1):
                 time.sleep(1)
         if iperf_mbps == -1:
             self.fail(
-                "iperf client %s did not connect to server %s"
-                % (iperf_client_cmd, iperf_server_cmd)
+                "iperf client %s did not connect to server %s: %s"
+                % (iperf_client_cmd, iperf_server_cmd, server_output)
             )
-        self.fail("iperf server %s never started" % iperf_server_cmd)
+        self.fail(
+            "iperf server %s never started: %s" % (iperf_server_cmd, server_output)
+        )
 
     def verify_ipv4_routing(
         self, first_host, first_host_routed_ip, second_host, second_host_routed_ip

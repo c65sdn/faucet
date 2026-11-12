@@ -10,6 +10,7 @@ import time
 
 # pylint: disable=import-error
 from mininet.log import error, output
+from mininet.util import pmonitor
 
 DEVNULL = open(os.devnull, "wb", encoding=None)  # pylint: disable=consider-using-with
 GETPORT = "GETPORT"
@@ -142,6 +143,11 @@ def udp_listening(port):
     )
 
 
+def drain_popen(popens):
+    """Consume and return the remaining output of popens, until all EOF."""
+    return "".join(line for _host, line in pmonitor(popens))
+
+
 def test_server_request(ports_socket, name, command):
     assert name is not None
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -262,10 +268,15 @@ def serve_ports(ports_socket, start_free_ports, min_free_ports):
 
 
 def timeout_cmd(cmd, timeout):
-    """Return a command line prefaced with a timeout wrappers and stdout/err unbuffered."""
-    return "timeout -sKILL %us stdbuf -o0 -e0 %s" % (timeout, cmd)
+    """Return a command line prefaced with a SIGKILL timeout wrapper.
+
+    No stdbuf: it LD_PRELOADs a helper into the command, leaking LD_PRELOAD
+    into its environment and printing an ld.so error into captured output
+    where preloaded objects cannot be mapped. Commands flush on their own.
+    """
+    return "timeout -sKILL %us %s" % (timeout, cmd)
 
 
 def timeout_soft_cmd(cmd, timeout):
-    """Same as timeout_cmd buf using SIGTERM on timeout."""
-    return "timeout %us stdbuf -o0 -e0 %s" % (timeout, cmd)
+    """Same as timeout_cmd but using SIGTERM on timeout."""
+    return "timeout %us %s" % (timeout, cmd)
